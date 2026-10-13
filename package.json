@@ -1,0 +1,14 @@
+{
+  "name": "surehire",
+  "private": true,
+  "type": "module",
+  "description": "Root of the combined Vercel deployment (client/ static build + api/ serverless Express from server/)",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "install:all": "npm ci --prefix server --omit=dev && npm ci --prefix client",
+    "build": "npm run build --prefix client",
+    "test:server": "npm test --prefix server"
+  }
+}

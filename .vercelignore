@@ -1,0 +1,14 @@
+# Keep uploads small and never ship secrets or local artifacts
+node_modules
+**/node_modules
+client/dist
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+*.tar
+*.zip
+**/.vercel
+server/tests
+*.log

@@ -1,0 +1,13 @@
+
+<svg
+  width="64"
+  height="64"
+  viewBox="0 0 64 64"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <!-- Briefcase Icon -->
+  <rect x="14" y="26" width="36" height="24" rx="4" stroke="#2563EB" stroke-width="4"/>
+  <rect x="24" y="16" width="16" height="10" rx="3" stroke="#2563EB" stroke-width="4"/>
+  <line x1="14" y1="38" x2="50" y2="38" stroke="#2563EB" stroke-width="4"/>
+</svg>
