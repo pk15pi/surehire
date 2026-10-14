@@ -10,7 +10,7 @@ const HomeCTA = () => (
                 <Briefcase className='text-blue-600' size={28} />
                 <h2 className='text-xl font-semibold mt-3'>Hiring engineers?</h2>
                 <p className='text-sm text-gray-600 mt-2'>Tell us about the role, location and timeline. You can attach a job description and our team will get back to you to discuss the requirement.</p>
-                <Link to='/hire-engineers' className='inline-block mt-5 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md text-sm font-medium'>Hire Engineers</Link>
+                <Link to='/hire-engineers' className='inline-block mt-5 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md text-sm font-medium'>Hire Talent</Link>
             </div>
             <div className='border border-gray-200 rounded-xl p-8 shadow-sm bg-linear-to-br from-purple-50 to-white'>
                 <FileUp className='text-purple-700' size={28} />

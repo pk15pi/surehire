@@ -1,5 +1,5 @@
 import {
-    EMPLOYMENT_TYPES, WORKPLACE_TYPES, SALARY_PERIODS, JOB_STATUSES, REFERENCE_ID_REGEX, buildLocation,
+    JOB_STATUSES, REFERENCE_ID_REGEX, buildLocation,
 } from '../models/Job.js'
 import { sanitizeHtml, isHtmlEmpty } from './sanitizeHtml.js'
 
@@ -14,6 +14,7 @@ const STRING_FIELDS = {
     title: 200, location: 300, category: 100, level: 100, department: 150, clientName: 200, recruiterOwner: 150,
     experienceLevel: 100, country: 100, state: 100, city: 100, address: 500, requiredDocuments: 2000,
     applicationInstructions: 5000, internalNotes: 10000,
+    employmentType: 100, workplaceType: 100, salaryPeriod: 100, industry: 150,
 }
 const HTML_FIELDS = { description: 50000, responsibilities: 20000, qualifications: 20000 }
 const NUMBER_FIELDS = {
@@ -23,7 +24,8 @@ const NUMBER_FIELDS = {
 const INT_FIELDS = new Set(['vacancies'])
 const BOOL_FIELDS = ['salaryNegotiable', 'salaryUndisclosed', 'featured']
 const DATE_FIELDS = ['applicationDeadline', 'publishAt', 'expiresAt']
-const ENUM_FIELDS = { employmentType: EMPLOYMENT_TYPES, workplaceType: WORKPLACE_TYPES, salaryPeriod: SALARY_PERIODS, status: JOB_STATUSES }
+// employmentType / workplaceType / salaryPeriod are labels derived from master data
+const ENUM_FIELDS = { status: JOB_STATUSES }
 const ARRAY_FIELDS = { skills: [60, 50], screeningQuestions: [500, 30] }
 const REQUIRED = new Set(['title', 'description'])
 
@@ -162,7 +164,7 @@ export const parseJobInput = (body, { partial = false, existing = null } = {}) =
         if (derived) set.location = derived
         else {
             // Legacy jobs only have the free-text `location`; keep it unless it no longer fits
-            const stale = !merged.location || (merged.workplaceType !== 'Remote' && /^remote\b/i.test(merged.location))
+            const stale = !merged.location || (!/^remote$/i.test(merged.workplaceType || '') && /^remote\b/i.test(merged.location))
             if (stale && !errors.city) errors.city = 'City is required for on-site and hybrid jobs'
         }
     }

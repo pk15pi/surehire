@@ -1,6 +1,11 @@
 import React, { useContext, useEffect, useRef, useState } from 'react'
 import Quill from 'quill'; 
 import { JobCategories, JobLocations } from '../assets/assets';
+import { usePublicMasters } from '../admin/useMasters';
+
+const OPTION_TYPES = ['categories', 'locations', 'experience-levels']
+// Fallback only if master data cannot be loaded, so recruiters are never blocked
+const FALLBACK_LEVELS = ['Beginner level', 'Intermediate level', 'Senior level']
 import axios from 'axios';
 import { AppContext } from '../context/AppContext';
 import { toast } from 'react-toastify';
@@ -18,7 +23,26 @@ const AddJob = () => {
 
     const { backendUrl, companyToken } = useContext(AppContext)
 
-    const onSubmitHandler = async (e) => {
+    // Options from master data (names are linked to masters on the server; nothing is created)
+    const masters = usePublicMasters(backendUrl, OPTION_TYPES)
+    const names = (type, fallback, fn = m => m.name) => (masters.data[type]?.length ? masters.data[type].map(fn) : (masters.loading ? [] : fallback))
+    const categoryOptions = names('categories', JobCategories)
+    const locationOptions = [...new Set(names('locations', JobLocations, m => m.city || m.name))]
+    const levelOptions = names('experience-levels', FALLBACK_LEVELS)
+    // Keep the selection valid once options load
+    if (categoryOptions.length && !categoryOptions.includes(category)) setCategory(categoryOptions[0])
+    if (locationOptions.length && !locationOptions.includes(location)) setLocation(locationOptions[0])
+    if (levelOptions.length && !levelOptions.includes(level)) setLevel(levelOptions[0])
+
+    // Duplicate-submit guard: ignore clicks while a request is in flight
+const [busy, setBusy] = useState(false)
+const busyRef = useRef(false)
+const onSubmitHandler = async (...args) => {
+  if (busyRef.current) { args[0]?.preventDefault?.(); return }
+  busyRef.current = true; setBusy(true)
+  try { return await onSubmitHandlerRun(...args) } finally { busyRef.current = false; setBusy(false) }
+}
+const onSubmitHandlerRun = async (e) => {
         e.preventDefault()
 
         try {
@@ -59,7 +83,7 @@ const AddJob = () => {
         {/* Job Title */}
         <div className='w-full'>
             <p className='mb-2'>Job Title</p>
-            <input type="text" placeholder='Type here' onChange={e => setTitle(e.target.value)} value={title} required className='w-full max-w-lg px-3 py-2 border-2 border-gray-300 rounded'/>
+            <input type="text" placeholder='Type here' onChange={e => setTitle(e.target.value)} value={title} maxLength={200} required className='w-full max-w-lg px-3 py-2 border-2 border-gray-300 rounded'/>
         </div>
         {/* Job Desc */}
         <div className='w-full max-w-lg'>
@@ -72,28 +96,28 @@ const AddJob = () => {
         <div className='flex flex-col sm:flex-row gap-2 w-full sm:gap-8'>
             <div>
                 <p className='mb-2'>Job Category</p>
-                <select className='w-full px-3 py-2 border-2 border-gray-300 rounded' onChange={e => setCategory(e.target.value)}>
-                    {JobCategories.map((category, index) => (
-                        <option key={index} value={category}>{category}</option>
+                <select className='w-full px-3 py-2 border-2 border-gray-300 rounded' value={category} onChange={e => setCategory(e.target.value)}>
+                    {categoryOptions.map((c) => (
+                        <option key={c} value={c}>{c}</option>
                     ))}
                 </select>
             </div>
             
             <div>
                 <p className='mb-2'>Job Location</p>
-                <select className='w-full px-3 py-2 border-2 border-gray-300 rounded' onChange={e => setLocation(e.target.value)}>
-                    {JobLocations.map((location, index) => (
-                        <option key={index} value={location}>{location}</option>
+                <select className='w-full px-3 py-2 border-2 border-gray-300 rounded' value={location} onChange={e => setLocation(e.target.value)}>
+                    {locationOptions.map((l) => (
+                        <option key={l} value={l}>{l}</option>
                     ))}
                 </select>
             </div>
 
             <div>
                 <p className='mb-2'>Job Level</p>
-                <select className='w-full px-3 py-2 border-2 border-gray-300 rounded' onChange={e => setLevel(e.target.value)}>
-                    <option value="Beginner level">Beginner level</option>
-                    <option value="Intermediate level">Intermediate level</option>
-                    <option value="Senior level">Senior level</option>
+                <select className='w-full px-3 py-2 border-2 border-gray-300 rounded' value={level} onChange={e => setLevel(e.target.value)}>
+                    {levelOptions.map((l) => (
+                        <option key={l} value={l}>{l}</option>
+                    ))}
                 </select>
             </div>
         </div>
@@ -103,7 +127,7 @@ const AddJob = () => {
             <input min={0} className='w-full px-3 py-2 border-2 border-gray-300 rounded sm:w-[120px' onChange={e => setSalary(e.target.value)} type="number" placeholder='25000'/>
         </div>
 
-        <button className='w-28 py-3 mt-4 bg-black text-white rounded'>ADD</button>
+        <button disabled={busy} className='disabled:opacity-60 w-28 py-3 mt-4 bg-black text-white rounded'>ADD</button>
     </form>
   )
 }

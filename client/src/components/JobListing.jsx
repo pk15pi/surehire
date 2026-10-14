@@ -1,11 +1,22 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { AppContext } from '../context/AppContext'
-import { assets, JobCategories, JobLocations } from '../assets/assets'
+import { assets } from '../assets/assets'
+import { usePublicMasters } from '../admin/useMasters'
+
+const FILTER_TYPES = ['categories', 'locations']
+const lower = (v) => String(v || '').toLowerCase()
 import JobCard from './JobCard'
 
 const JobListing = () => {
 
-    const { isSearched, searchFilter, setSearchFilter, jobs } = useContext(AppContext)
+    const { isSearched, searchFilter, setSearchFilter, jobs, backendUrl } = useContext(AppContext)
+    // Filter options come from master data (active values only)
+    const masters = usePublicMasters(backendUrl, FILTER_TYPES)
+    const categoryOptions = masters.data.categories || []
+    // Until the location master is seeded, fall back to distinct locations of the listed jobs
+    const masterLocations = masters.data.locations || []
+    const locationOptions = masterLocations.length || masters.loading ? masterLocations
+        : [...new Set((jobs || []).map(j => (j.location || '').trim()).filter(Boolean))].sort().map(name => ({ _id: 'job-loc-' + name, name }))
 
     const [showFilter, setShowFilter] = useState(false)
     const [currentPage, setCurrentPage] = useState(1)
@@ -16,21 +27,22 @@ const JobListing = () => {
 
     const handleCategoryChange = (category) => {
         setSelectedCategories(
-            prev => prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
+            prev => prev.some(c => c._id === category._id) ? prev.filter(c => c._id !== category._id) : [...prev, category]
         )
     }
     const handleLocationChange = (location) => {
         setSelectedLocations(
-            prev => prev.includes(location) ? prev.filter(c => c !== location) : [...prev, location]
+            prev => prev.some(c => c._id === location._id) ? prev.filter(c => c._id !== location._id) : [...prev, location]
         )
     }
 
     useEffect(() => {
 
-        const matchesCategory = job => selectedCategories.length === 0 || selectedCategories.includes(job.category)
-        // Admin-created jobs store "City, State, Country", so match the selected city as a substring
+        // Selected values are master records: match the linked id, or the label for older jobs
+        const matchesCategory = job => selectedCategories.length === 0 || selectedCategories.some(c => String(job.categoryId || '') === c._id || lower(job.category) === lower(c.name))
         const locationText = job => `${job.location || ''} ${job.city || ''}`.toLowerCase()
-        const matchesLocation = job => selectedLocations.length === 0 || selectedLocations.some(loc => locationText(job).includes(loc.toLowerCase()))
+        const matchesLocation = job => selectedLocations.length === 0 || selectedLocations.some(loc =>
+            (job.locationIds || []).map(String).includes(loc._id) || locationText(job).includes(lower(loc.city || loc.name)))
         const matchesTitle = job => searchFilter.title === "" || (job.title || '').toLowerCase().includes(searchFilter.title.toLowerCase())
         const matchesSearchLocation = job => searchFilter.location === "" || locationText(job).includes(searchFilter.location.toLowerCase())
 
@@ -79,12 +91,14 @@ const JobListing = () => {
                 <div className={showFilter ? "" : "max-lg:hidden"}>
                     <h4 className='font-medium text-lg py-4'>Search by Categories</h4>
                     <ul className='space-y-4 text-gray-600'>
+                        {masters.loading && !categoryOptions.length && <li className='text-sm text-gray-400'>Loading...</li>}
+                        {masters.error && <li className='text-sm text-gray-400'>Filters unavailable right now.</li>}
                         {
-                            JobCategories.map((category, index) => (
-                                <li className='flex gap-3 items-center' key={index}>
-                                    <input className='scale-125' type="checkbox" onChange={() => handleCategoryChange(category)}
-                                        checked={selectedCategories.includes(category)} />
-                                    {category}
+                            categoryOptions.map((category) => (
+                                <li className='flex gap-3 items-center' key={category._id}>
+                                    <input id={`cat-${category._id}`} className='scale-125' type="checkbox" onChange={() => handleCategoryChange(category)}
+                                        checked={selectedCategories.some(c => c._id === category._id)} />
+                                    <label htmlFor={`cat-${category._id}`}>{category.name}</label>
                                 </li>
                             ))
                         }
@@ -96,11 +110,11 @@ const JobListing = () => {
                     <h4 className='font-medium text-lg py-4 pt-14'>Search by Location</h4>
                     <ul className='space-y-4 text-gray-600'>
                         {
-                            JobLocations.map((location, index) => (
-                                <li className='flex gap-3 items-center' key={index}>
-                                    <input className='scale-125' type="checkbox" onChange={() => handleLocationChange(location)}
-                                        checked={selectedLocations.includes(location)} />
-                                    {location}
+                            locationOptions.map((location) => (
+                                <li className='flex gap-3 items-center' key={location._id}>
+                                    <input id={`loc-${location._id}`} className='scale-125' type="checkbox" onChange={() => handleLocationChange(location)}
+                                        checked={selectedLocations.some(c => c._id === location._id)} />
+                                    <label htmlFor={`loc-${location._id}`}>{location.city || location.name}</label>
                                 </li>
                             ))
                         }

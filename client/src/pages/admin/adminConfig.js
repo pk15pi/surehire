@@ -1,9 +1,9 @@
-// Admin tabs: URL path -> API submission type
+// Enquiry tabs under /admin/enquiries/:section: URL path -> API submission type
 export const ADMIN_TABS = [
     { path: 'calls', type: 'call', label: 'Calls', title: 'Call requests' },
-    { path: 'enquiries', type: 'enquiry', label: 'Quick enquiries', title: 'Quick enquiries' },
+    { path: 'quick', type: 'enquiry', label: 'Quick enquiries', title: 'Quick enquiries' },
     { path: 'hire-requests', type: 'hire', label: 'Hire requests', title: 'Hire requests' },
-    { path: 'candidates', type: 'candidate', label: 'Candidates', title: 'Candidate submissions' },
+    { path: 'cv-submissions', type: 'candidate', label: 'CV submissions', title: 'Candidate CV submissions' },
 ]
 
 // Which field is the "headline" for each type
@@ -28,3 +28,15 @@ export const humanize = (s) => String(s)
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/[_-]+/g, ' ')
     .replace(/^./, c => c.toUpperCase())
+
+// Main admin navigation
+export const ADMIN_NAV = [
+    { to: '/admin/dashboard', label: 'Dashboard' },
+    { to: '/admin/jobs', label: 'Jobs' },
+    { to: '/admin/candidates', label: 'Candidates' },
+    { to: '/admin/applications', label: 'Applications' },
+    { to: '/admin/clients', label: 'Clients' },
+    { to: '/admin/master', label: 'Master data' },
+    { to: '/admin/enquiries', label: 'Enquiries' },
+    { to: '/admin/audit-logs', label: 'Audit logs' },
+]

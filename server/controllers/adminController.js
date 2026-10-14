@@ -4,6 +4,9 @@ import CallRequest from "../models/CallRequest.js"
 import Enquiry from "../models/Enquiry.js"
 import HireRequest from "../models/HireRequest.js"
 import CandidateSubmission from "../models/CandidateSubmission.js"
+import Job from "../models/Job.js"
+import JobApplication from "../models/jobApplication.js"
+import User from "../models/User.js"
 import { getAdminConfig, signAdminToken, verifyAdminCredentials } from "../middleware/adminAuth.js"
 
 // Submission types the admin panel can manage. `fileField` holds a private Cloudinary document.
@@ -173,5 +176,85 @@ export const getDocumentUrl = async (req, res) => {
         })
     } catch (error) {
         return serverError(res, error, 'getDocumentUrl')
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Job applications (Clerk candidates applying via "Apply Now").
+// Covers admin-posted jobs (companyId null) and recruiter jobs alike.
+// ---------------------------------------------------------------------------
+export const APPLICATION_STATUSES = ['Pending', 'Accepted', 'Rejected']
+
+// GET /api/admin/applications?jobId=&status=&page=
+export const listApplications = async (req, res) => {
+    try {
+        const filter = {}
+        const jobId = typeof req.query.jobId === 'string' ? req.query.jobId : ''
+        if (jobId) {
+            if (!mongoose.isValidObjectId(jobId)) return res.status(400).json({ success: false, message: 'Invalid job id' })
+            filter.jobId = jobId
+        }
+        const status = typeof req.query.status === 'string' ? req.query.status : ''
+        if (status) {
+            if (!APPLICATION_STATUSES.includes(status)) return res.status(400).json({ success: false, message: 'Invalid status filter' })
+            filter.status = status
+        }
+        const pageNum = Number.parseInt(req.query.page, 10)
+        const page = Number.isFinite(pageNum) && pageNum > 0 ? Math.min(pageNum, 10000) : 1
+
+        const [items, total] = await Promise.all([
+            JobApplication.find(filter).sort({ date: -1 }).skip((page - 1) * PAGE_SIZE).limit(PAGE_SIZE)
+                .populate({ path: 'userId', model: User, select: 'name email image resume' })
+                .populate({ path: 'jobId', model: Job, select: 'title referenceId clientName location status visible' })
+                .lean(),
+            JobApplication.countDocuments(filter),
+        ])
+
+        return res.json({
+            success: true,
+            statuses: APPLICATION_STATUSES,
+            items: items.map(({ __v, ...a }) => a),
+            total, page, pageSize: PAGE_SIZE,
+            pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+        })
+    } catch (error) {
+        return serverError(res, error, 'listApplications')
+    }
+}
+
+// PATCH /api/admin/applications/:id   body: { status }
+export const updateApplicationStatus = async (req, res) => {
+    try {
+        if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid id' })
+        const status = req.body?.status
+        if (typeof status !== 'string' || !APPLICATION_STATUSES.includes(status)) {
+            return res.status(400).json({ success: false, message: 'Invalid status' })
+        }
+        const doc = await JobApplication.findByIdAndUpdate(req.params.id, { $set: { status } }, { returnDocument: 'after' }).lean()
+        if (!doc) return res.status(404).json({ success: false, message: 'Application not found' })
+        return res.json({ success: true, message: 'Status updated', status: doc.status })
+    } catch (error) {
+        return serverError(res, error, 'updateApplicationStatus')
+    }
+}
+
+// GET /api/admin/overview -> real counts straight from the database (no estimates)
+export const getOverview = async (req, res) => {
+    try {
+        const countBy = async (model, field) => {
+            const rows = await model.aggregate([{ $group: { _id: `$${field}`, count: { $sum: 1 } } }])
+            return Object.fromEntries(rows.map(r => [r._id == null ? 'unset' : String(r._id), r.count]))
+        }
+        const [jobs, applications, call, enquiry, hire, candidate] = await Promise.all([
+            countBy(Job, 'status'),
+            countBy(JobApplication, 'status'),
+            countBy(CallRequest, 'status'),
+            countBy(Enquiry, 'status'),
+            countBy(HireRequest, 'status'),
+            countBy(CandidateSubmission, 'status'),
+        ])
+        return res.json({ success: true, generatedAt: new Date().toISOString(), jobs, applications, submissions: { call, enquiry, hire, candidate } })
+    } catch (error) {
+        return serverError(res, error, 'getOverview')
     }
 }

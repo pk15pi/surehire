@@ -31,7 +31,7 @@ const Industries = () => {
             ))}
         </div>
         <div className='flex flex-wrap gap-3 mt-10'>
-            <Link to='/hire-engineers' className='bg-blue-600 text-white px-5 py-2 rounded-md'>Hire Engineers</Link>
+            <Link to='/hire-engineers' className='bg-blue-600 text-white px-5 py-2 rounded-md'>Hire Talent</Link>
             <Link to='/submit-resume' className='border border-gray-300 px-5 py-2 rounded-md'>Submit Your Resume</Link>
         </div>
     </PageLayout>

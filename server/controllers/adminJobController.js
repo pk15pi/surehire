@@ -1,7 +1,51 @@
 import mongoose from 'mongoose'
-import Job, { EMPLOYMENT_TYPES, WORKPLACE_TYPES, JOB_STATUSES, generateReferenceId, effectiveStatus } from '../models/Job.js'
+import Job, { JOB_STATUSES, generateReferenceId, effectiveStatus } from '../models/Job.js'
+import Location from '../models/Location.js'
 import JobApplication from '../models/jobApplication.js'
 import { parseJobInput, mongooseErrors } from '../utils/jobInput.js'
+import { JOB_MASTER_REFS, MASTER_TEXT_FIELDS, multiLocationText, resolveJobMasters } from '../utils/jobMasters.js'
+import { MASTER_TYPES, typeFilter } from '../master/registry.js'
+import { suggestJobMasters } from '../master/migrateJobMasters.js'
+import { recordAudit } from '../utils/audit.js'
+
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k)
+
+// Admin payload -> validated $set/$unset. Master-controlled legacy text is ignored
+// in the input and re-derived from the referenced masters.
+const buildJobChanges = async (rawBody, existing) => {
+    const body = { ...(rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody) ? rawBody : {}) }
+    for (const k of MASTER_TEXT_FIELDS) delete body[k]
+    const { refSet, refUnset, derived, errors: refErrors } = await resolveJobMasters(body, existing)
+    const { _locationLabels, ...derivedText } = derived
+    const partial = !!existing
+    const { set, unset, errors } = parseJobInput({ ...body, ...derivedText }, { partial, existing })
+    Object.assign(errors, refErrors)
+    // An On-site/Hybrid job needs a location: show the error on the location picker
+    if (errors.city) { errors.locationIds ||= errors.city; delete errors.city }
+    if (errors.currency) { errors.currencyId = errors.currency; delete errors.currency }
+    // Core classification is required when creating a job
+    if (!existing) {
+        for (const [k, msg] of [['categoryId', 'Category is required'], ['employmentTypeId', 'Employment type is required'], ['workplaceTypeId', 'Workplace type is required']]) {
+            if (!refSet[k] && !errors[k]) errors[k] = msg
+        }
+    }
+    Object.assign(set, refSet)
+    const allUnset = [...unset, ...refUnset.filter(k => !has(set, k))]
+
+    // Multi-location label (and keep it right when only the workplace type changes)
+    const finalLocIds = has(set, 'locationIds') ? set.locationIds : (existing?.locationIds || [])
+    const workplace = has(set, 'workplaceType') ? set.workplaceType : existing?.workplaceType
+    if (finalLocIds.length && (_locationLabels || has(set, 'workplaceType') || has(set, 'location'))) {
+        let labels = _locationLabels
+        if (!labels) {
+            const docs = await Location.find({ _id: { $in: finalLocIds } }).select('name city state country').lean()
+            const byId = new Map(docs.map(d => [String(d._id), d]))
+            labels = finalLocIds.map(id => byId.get(String(id))).filter(Boolean).map(l => [l.city, l.state, l.country].filter(Boolean).join(', ') || l.name)
+        }
+        if (labels.length) set.location = multiLocationText(labels, workplace)
+    }
+    return { set, unset: allUnset.filter(k => !has(set, k)), errors }
+}
 
 // ---------------------------------------------------------------------------
 // Admin job management (mounted under /api/admin/jobs, protected by protectAdmin).
@@ -81,15 +125,27 @@ export const listJobs = async (req, res) => {
             else if (status === 'published') and.push({ $or: [{ status: 'published' }, { status: { $in: [null] }, visible: { $ne: false } }] })
             else and.push({ $or: [{ status: 'draft' }, { status: { $in: [null] }, visible: false }] })
         }
-        for (const [key, allowed] of [['employmentType', EMPLOYMENT_TYPES], ['workplaceType', WORKPLACE_TYPES]]) {
-            const v = typeof qp[key] === 'string' ? qp[key] : ''
+        // Master filters by id. Jobs not yet linked (legacy) match on the label text.
+        for (const ref of JOB_MASTER_REFS) {
+            const queryKey = ref.array ? ref.idField.replace(/Ids$/, 'Id') : ref.idField
+            const v = typeof qp[queryKey] === 'string' ? qp[queryKey] : ''
             if (!v) continue
-            if (!allowed.includes(v)) return fail(res, 400, `Invalid ${key} filter`)
-            and.push({ [key]: v })
+            if (!mongoose.isValidObjectId(v)) return fail(res, 400, `Invalid ${queryKey} filter`)
+            const cfg = MASTER_TYPES[ref.type]
+            const master = await cfg.model.findOne({ _id: v, ...typeFilter(cfg) }).select('name code city').lean()
+            if (!master) return fail(res, 400, `Unknown ${cfg.singular.toLowerCase()} filter`)
+            const legacy = { categoryId: 'category', employmentTypeId: 'employmentType', workplaceTypeId: 'workplaceType', experienceLevelId: 'experienceLevel', departmentId: 'department', clientId: 'clientName' }[ref.idField]
+            const ors = [{ [ref.idField]: master._id }]
+            if (legacy) ors.push({ [ref.idField]: { $in: [null] }, [legacy]: new RegExp(`^${escapeRegex(master.name)}$`, 'i') })
+            if (ref.idField === 'locationIds' && master.city) ors.push({ locationIds: { $in: [null] }, city: new RegExp(`^${escapeRegex(master.city)}$`, 'i') })
+            and.push({ $or: ors })
         }
-        const category = typeof qp.category === 'string' ? qp.category.trim().slice(0, 100) : ''
-        if (category) and.push({ category })
-
+        if (qp.expired === 'true') and.push({ expiresAt: { $lte: new Date() } })
+        // Legacy text filters (kept for old links)
+        for (const key of ['employmentType', 'workplaceType']) {
+            const v = typeof qp[key] === 'string' ? qp[key].trim().slice(0, 100) : ''
+            if (v) and.push({ [key]: v })
+        }
         const sortField = SORTS[qp.sort] || 'createdAt'
         const dir = qp.order === 'asc' ? 1 : -1
         // createdAt is missing on legacy docs; fall back to the legacy numeric `date`
@@ -103,7 +159,7 @@ export const listJobs = async (req, res) => {
         const filter = and.length ? { $and: and } : {}
         const [items, total] = await Promise.all([
             Job.find(filter)
-                .select('title referenceId clientName department location city state country employmentType workplaceType category status visible featured applicationDeadline publishAt expiresAt createdAt updatedAt date companyId')
+                .select('title referenceId clientName clientId department location city state country employmentType workplaceType category categoryId status visible featured applicationDeadline publishAt expiresAt createdAt updatedAt date companyId')
                 .populate({ path: 'companyId', select: 'name' })
                 .sort(sort).skip((page - 1) * limit).limit(limit).lean(),
             Job.countDocuments(filter),
@@ -123,7 +179,7 @@ export const listJobs = async (req, res) => {
             items: items.map(j => toAdminJob(j, countMap.get(String(j._id)) || 0)),
             total, page, pageSize: limit,
             pages: Math.max(1, Math.ceil(total / limit)),
-            options: { statuses: JOB_STATUSES, employmentTypes: EMPLOYMENT_TYPES, workplaceTypes: WORKPLACE_TYPES },
+            options: { statuses: JOB_STATUSES },
         })
     } catch (error) {
         return serverError(res, error, 'listJobs')
@@ -138,7 +194,8 @@ export const getJob = async (req, res) => {
         if (job.companyId) {
             await Job.populate(job, { path: 'companyId', select: 'name image email' })
         }
-        return res.json({ success: true, job: toAdminJob(job, await countApplications(job._id)) })
+        const suggestedMasters = await suggestJobMasters(job).catch(() => ({}))
+        return res.json({ success: true, job: toAdminJob(job, await countApplications(job._id)), suggestedMasters })
     } catch (error) {
         return serverError(res, error, 'getJob')
     }
@@ -147,7 +204,7 @@ export const getJob = async (req, res) => {
 // POST /api/admin/jobs
 export const createJob = async (req, res) => {
     try {
-        const { set, errors } = parseJobInput(req.body, { partial: false })
+        const { set, errors } = await buildJobChanges(req.body, null)
         if (Object.keys(errors).length) return fail(res, 400, 'Please fix the highlighted fields', { errors })
 
         if (!set.status) { set.status = 'draft'; set.visible = false }
@@ -159,6 +216,7 @@ export const createJob = async (req, res) => {
             ...set, date: Date.now(), companyId: null, createdBy: req.admin?.email, updatedBy: req.admin?.email,
         }, autoRef)
         const job = await Job.findById(doc._id).select(ADMIN_SELECT).lean()
+        await recordAudit(req, { action: 'create', entityType: 'job', entityId: job._id, entityLabel: `${job.referenceId} ${job.title}`, changes: Object.keys(set), meta: { status: job.status } })
         return res.status(201).json({ success: true, message: 'Job created', job: toAdminJob(job, 0) })
     } catch (error) {
         return handleWriteError(res, error, 'createJob')
@@ -170,7 +228,7 @@ export const updateJob = async (req, res) => {
     try {
         const existing = await loadJob(req, res)
         if (!existing) return
-        const { set, unset, errors } = parseJobInput(req.body, { partial: true, existing })
+        const { set, unset, errors } = await buildJobChanges(req.body, existing)
         if (Object.keys(errors).length) return fail(res, 400, 'Please fix the highlighted fields', { errors })
         if (!Object.keys(set).length && !unset.length) return fail(res, 400, 'Nothing to update')
 
@@ -186,6 +244,7 @@ export const updateJob = async (req, res) => {
         const job = await Job.findByIdAndUpdate(existing._id, update, { returnDocument: 'after', runValidators: true, context: 'query' })
             .select(ADMIN_SELECT).lean()
         if (!job) return fail(res, 404, 'Job not found')
+        await recordAudit(req, { action: 'update', entityType: 'job', entityId: job._id, entityLabel: `${job.referenceId} ${job.title}`, changes: [...Object.keys(set), ...unset].filter(k => k !== 'updatedBy') })
         return res.json({ success: true, message: 'Job updated', job: toAdminJob(job, await countApplications(job._id)) })
     } catch (error) {
         return handleWriteError(res, error, 'updateJob')
@@ -205,6 +264,7 @@ const setStatus = (status, message) => async (req, res) => {
         }
         const job = await Job.findByIdAndUpdate(existing._id, { $set: set }, { returnDocument: 'after', runValidators: true })
             .select(ADMIN_SELECT).lean()
+        await recordAudit(req, { action: status === 'published' ? 'publish' : status === 'draft' ? 'unpublish' : 'archive', entityType: 'job', entityId: job._id, entityLabel: `${job.referenceId} ${job.title}`, changes: ['status', 'visible'], meta: { from: effectiveStatus(existing), to: status } })
         return res.json({ success: true, message, job: toAdminJob(job, await countApplications(job._id)) })
     } catch (error) {
         return handleWriteError(res, error, `setStatus:${status}`)
@@ -229,6 +289,7 @@ export const duplicateJob = async (req, res) => {
             date: Date.now(), createdBy: req.admin?.email, updatedBy: req.admin?.email,
         }, true)
         const job = await Job.findById(doc._id).select(ADMIN_SELECT).lean()
+        await recordAudit(req, { action: 'duplicate', entityType: 'job', entityId: job._id, entityLabel: `${job.referenceId} ${job.title}`, meta: { sourceId: String(existing._id), sourceReference: existing.referenceId || '' } })
         return res.status(201).json({ success: true, message: 'Job duplicated as draft', job: toAdminJob(job, 0) })
     } catch (error) {
         return handleWriteError(res, error, 'duplicateJob')
@@ -245,6 +306,7 @@ export const deleteJob = async (req, res) => {
             return fail(res, 409, `This job has ${count} application(s) and cannot be deleted. Archive it instead.`, { applicationCount: count })
         }
         await Job.deleteOne({ _id: existing._id })
+        await recordAudit(req, { action: 'delete', entityType: 'job', entityId: existing._id, entityLabel: `${existing.referenceId || ''} ${existing.title}`.trim() })
         return res.json({ success: true, message: 'Job deleted' })
     } catch (error) {
         return serverError(res, error, 'deleteJob')

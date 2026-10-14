@@ -215,7 +215,7 @@ const AdminSubmissionsView = ({ section }) => {
 
     useEffect(() => { load() }, [load])
 
-    if (!tab) return <Navigate to='/admin/calls' replace />
+    if (!tab) return <Navigate to='/admin/enquiries/calls' replace />
 
     const onSearch = (e) => {
         e.preventDefault()

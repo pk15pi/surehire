@@ -48,7 +48,7 @@ const Hero = () => {
                     <button onClick={onSearch} className='bg-blue-600 px-6 py-2 rounded text-white m-1'>Search</button>
                 </div>
                 <div className='flex flex-wrap justify-center gap-3 mt-6 px-4 text-sm'>
-                    <Link to='/hire-engineers' className='bg-white text-purple-900 px-5 py-2 rounded-full font-medium hover:bg-purple-100'>Hire Engineers</Link>
+                    <Link to='/hire-engineers' className='bg-white text-purple-900 px-5 py-2 rounded-full font-medium hover:bg-purple-100'>Hire Talent</Link>
                     <Link to='/submit-resume' className='border border-white px-5 py-2 rounded-full hover:bg-white/10'>Submit Your Resume</Link>
                 </div>
             </div>

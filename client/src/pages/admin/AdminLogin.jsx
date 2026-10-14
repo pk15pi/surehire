@@ -14,7 +14,7 @@ const AdminLogin = () => {
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
 
-    if (getAdminToken()) return <Navigate to='/admin/calls' replace />
+    if (getAdminToken()) return <Navigate to='/admin/dashboard' replace />
 
     const onSubmit = async (e) => {
         e.preventDefault()
@@ -26,7 +26,7 @@ const AdminLogin = () => {
             if (data.success && data.token) {
                 setAdminSession(data.token, data.email)
                 setPassword('')
-                navigate('/admin/calls', { replace: true })
+                navigate('/admin/dashboard', { replace: true })
             } else {
                 setError(data.message || 'Login failed')
             }

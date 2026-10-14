@@ -4,11 +4,13 @@ import JobApplication from "../models/jobApplication.js"
 import User from "../models/User.js"
 import { v2 as cloudinary } from "cloudinary"
 
+const MAX_ANSWER = 2000
+
 
 // Get user data
 export const getUserData = async(req, res) => {
 
-    const {userId} = req.auth()
+    const userId = req.userId
 
     try {
         
@@ -20,7 +22,8 @@ export const getUserData = async(req, res) => {
         res.json({success:true, user})
 
     } catch (error) {
-        res.json({success:false, message: error.message})
+        console.error('[controller]', error?.message || error)
+        res.json({ success: false, message: 'Something went wrong. Please try again.' })
     }
 
 }
@@ -29,9 +32,9 @@ export const getUserData = async(req, res) => {
 // Apply for a Job
 export const applyForJob = async(req, res) => {
 
-    const { jobId } = req.body
+    const { jobId, answers } = req.body || {}
 
-    const {userId} = req.auth()
+    const userId = req.userId
 
     try {
         
@@ -46,7 +49,7 @@ export const applyForJob = async(req, res) => {
         }
 
         // Only currently published jobs accept applications
-        const jobData = await Job.findOne({ _id: jobId, ...publicJobFilter() }).select('companyId applicationDeadline').lean()
+        const jobData = await Job.findOne({ _id: jobId, ...publicJobFilter() }).select('companyId applicationDeadline screeningQuestions').lean()
 
         if (!jobData) {
             return res.json({success:false, message:'Job not found'})
@@ -56,17 +59,35 @@ export const applyForJob = async(req, res) => {
             return res.json({success:false, message:'Applications for this job are closed'})
         }
 
+        // Screening questions: one non-empty text answer per question set on the job
+        const questions = Array.isArray(jobData.screeningQuestions) ? jobData.screeningQuestions : []
+        let screeningAnswers
+        if (questions.length) {
+            const list = Array.isArray(answers) ? answers : []
+            if (list.length !== questions.length || list.some(a => typeof a !== 'string' || !a.trim())) {
+                return res.json({ success: false, message: 'Please answer all screening questions' })
+            }
+            if (list.some(a => a.trim().length > MAX_ANSWER)) {
+                return res.json({ success: false, message: `Each answer must be at most ${MAX_ANSWER} characters` })
+            }
+            screeningAnswers = questions.map((question, i) => ({ question, answer: list[i].trim() }))
+        }
+
         await JobApplication.create({
             companyId: jobData.companyId || null,
             userId,
             jobId,
-            date: Date.now()
+            date: Date.now(),
+            ...(screeningAnswers ? { screeningAnswers } : {}),
         })
 
         res.json({success:true, message:'Applied Successfully'})
 
     } catch (error) {
-        res.json({success:false, message: error.message})
+        // Unique {jobId,userId} index: a concurrent duplicate submit lands here
+        if (error?.code === 11000) return res.json({ success: false, message: 'Already Applied' })
+        console.error('[controller]', error?.message || error)
+        res.json({ success: false, message: 'Something went wrong. Please try again.' })
     }
 
 }
@@ -76,7 +97,7 @@ export const getUserJobApplications = async(req, res) => {
 
     try {
         
-        const {userId} = req.auth()
+        const userId = req.userId
 
         const applications = await JobApplication.find({ userId })
         .populate('companyId', ' name email image')
@@ -90,7 +111,8 @@ export const getUserJobApplications = async(req, res) => {
         return res.json({success:true, applications})
 
     } catch (error) {
-        res.json({success:false, message:error.message})
+        console.error('[controller]', error?.message || error)
+        res.json({ success: false, message: 'Something went wrong. Please try again.' })
     }
 
 }
@@ -99,11 +121,18 @@ export const getUserJobApplications = async(req, res) => {
 export const updateUserResume = async(req, res) => {
     try {
         
-        const {userId} = req.auth()
+        const userId = req.userId
 
         const resumeFile = req.file
 
         const userData = await User.findById(userId)
+
+        if (!userData) {
+            return res.json({ success: false, message: 'User not found' })
+        }
+        if (!resumeFile) {
+            return res.json({ success: false, message: 'Please select a PDF resume' })
+        }
 
         if (resumeFile) {
 
@@ -117,6 +146,7 @@ export const updateUserResume = async(req, res) => {
         return res.json({success:true, message:'Resume Updated'})
 
     } catch (error) {
-        res.json({success:false, message:error.message})
+        console.error('[controller]', error?.message || error)
+        res.json({ success: false, message: 'Something went wrong. Please try again.' })
     }
 }

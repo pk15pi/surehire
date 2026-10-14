@@ -9,6 +9,7 @@ const FAQPage = () => {
   return (
     <div>
       <Navbar />
+      <h1 className='container mx-auto px-4 2xl:px-20 pt-8 text-3xl font-semibold'>FAQ</h1>
       <FAQ />
       <Footer />
     </div>

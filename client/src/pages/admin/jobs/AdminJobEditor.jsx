@@ -4,7 +4,7 @@ import { toast } from 'react-toastify'
 import { ArrowLeft } from 'lucide-react'
 import { AppContext } from '../../../context/AppContext'
 import { apiErrorMessage, createAdminJob, isAuthError, updateAdminJob } from '../../../admin/adminApi'
-import { EMPTY_JOB, formToPayload, jobToForm } from '../../../admin/jobOptions'
+import { EMPTY_JOB, formToPayload, jobToForm, legacyLabels } from '../../../admin/jobOptions'
 import usePageMeta from '../../../hooks/usePageMeta'
 import useAdminAuthError from './useAdminAuthError'
 import useAdminJob from './useAdminJob'
@@ -36,10 +36,17 @@ const useSubmit = () => {
     return { submitting, serverErrors, run }
 }
 
-const Header = ({ title, backTo }) => (
-    <div className='flex items-center gap-3 mb-4'>
-        <Link to={backTo} className='text-gray-500 hover:text-blue-600' aria-label='Back'><ArrowLeft size={18} /></Link>
-        <h1 className='text-xl font-semibold'>{title}</h1>
+const Header = ({ title, backTo, crumbs = [] }) => (
+    <div className='mb-4'>
+        <nav aria-label='Breadcrumb' className='text-xs text-gray-500 mb-1 flex gap-1'>
+            <Link to='/admin/dashboard' className='hover:underline'>Admin</Link><span>/</span>
+            <Link to='/admin/jobs' className='hover:underline'>Jobs</Link>
+            {crumbs.map(c => <React.Fragment key={c}><span>/</span><span>{c}</span></React.Fragment>)}
+        </nav>
+        <div className='flex items-center gap-3'>
+            <Link to={backTo} className='text-gray-500 hover:text-blue-600' aria-label='Back'><ArrowLeft size={18} /></Link>
+            <h1 className='text-xl font-semibold'>{title}</h1>
+        </div>
     </div>
 )
 
@@ -57,7 +64,7 @@ export const AdminJobCreate = () => {
 
     return (
         <div className='max-w-5xl'>
-            <Header title='New job' backTo='/admin/jobs' />
+            <Header title='New job' backTo='/admin/jobs' crumbs={['New']} />
             <JobForm mode='create' initial={initial} onSubmit={onSubmit} onCancel={() => navigate('/admin/jobs')} submitting={submitting} serverErrors={serverErrors} />
         </div>
     )
@@ -68,9 +75,10 @@ export const AdminJobEdit = () => {
     usePageMeta('Admin - Edit job', 'SureHire admin', { noIndex: true })
     const { backendUrl } = useContext(AppContext)
     const navigate = useNavigate()
-    const { job, state, error, reload } = useAdminJob(id)
+    const { job, suggested, state, error, reload } = useAdminJob(id)
     const { submitting, serverErrors, run } = useSubmit()
     const initial = useMemo(() => (job ? jobToForm(job) : null), [job])
+    const legacy = useMemo(() => (job ? legacyLabels(job) : {}), [job])
 
     if (state === 'loading') return <JobLoading />
     if (state === 'notFound') return <JobNotFound />
@@ -84,8 +92,8 @@ export const AdminJobEdit = () => {
 
     return (
         <div className='max-w-5xl'>
-            <Header title={`Edit: ${job.title}`} backTo={`/admin/jobs/${id}`} />
-            <JobForm key={job.updatedAt || job._id} mode='edit' initial={initial} legacyLocation={job.city ? '' : job.location}
+            <Header title={`Edit: ${job.title}`} backTo={`/admin/jobs/${id}`} crumbs={[job.referenceId || 'Job', 'Edit']} />
+            <JobForm key={job.updatedAt || job._id} mode='edit' initial={initial} legacyLocation={job.locationIds?.length ? '' : (job.location || '')} legacy={legacy} suggested={suggested}
                 onSubmit={onSubmit} onCancel={() => navigate(`/admin/jobs/${id}`)} submitting={submitting} serverErrors={serverErrors} />
         </div>
     )

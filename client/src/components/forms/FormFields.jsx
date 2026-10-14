@@ -47,11 +47,11 @@ export const PhoneInput = ({ label = 'Phone', codeName = 'countryCode', phoneNam
     <Field label={label} required={required} error={error} htmlFor={phoneName}>
         <div className='flex gap-2'>
             <select name={codeName} value={codeValue} onChange={onChange} disabled={disabled} aria-label='Country code'
-                className={`${baseInput} border-gray-300 bg-white w-36 shrink-0`}>
+                className={`${baseInput.replace('w-full ', '')} border-gray-300 bg-white w-28 sm:w-36 flex-none`}>
                 {COUNTRY_CODES.map(c => <option key={c.label} value={c.code}>{c.label}</option>)}
             </select>
             <input id={phoneName} name={phoneName} type='tel' inputMode='tel' value={phoneValue} onChange={onChange}
-                placeholder='Phone number' maxLength={20} disabled={disabled} required={required} aria-required={required || undefined} aria-invalid={!!error} className={inputClass(error)} />
+                placeholder='Phone number' maxLength={20} disabled={disabled} required={required} aria-required={required || undefined} aria-invalid={!!error} className={`${inputClass(error)} min-w-0 flex-1`} />
         </div>
     </Field>
 )

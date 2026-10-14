@@ -3,7 +3,8 @@ import path from "path";
 
 // In-memory upload for enquiry documents (resume / JD). Files are validated and
 // then streamed to Cloudinary; nothing is written to local disk.
-export const MAX_DOC_SIZE = 5 * 1024 * 1024 // 5 MB
+// 4 MB: Vercel rejects request bodies over 4.5 MB before they reach the function
+export const MAX_DOC_SIZE = 4 * 1024 * 1024
 
 export const ALLOWED_DOC_TYPES = {
     '.pdf': ['application/pdf'],
@@ -46,7 +47,7 @@ export const singleDocUpload = (fieldName) => (req, res, next) => {
         }
         if (err instanceof multer.MulterError) {
             const message = err.code === 'LIMIT_FILE_SIZE'
-                ? 'File is too large. Maximum size is 5 MB'
+                ? 'File is too large. Maximum size is 4 MB'
                 : err.code === 'LIMIT_UNEXPECTED_FILE'
                     ? 'Unexpected file field'
                     : 'File upload failed'

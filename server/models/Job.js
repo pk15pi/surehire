@@ -28,11 +28,12 @@ export const generateReferenceId = (date = new Date()) => {
 // Derive the legacy `location` string from the structured fields
 export const buildLocation = ({ workplaceType, city, state, country } = {}) => {
     const place = [city, state, country].map(s => (s || '').trim()).filter(Boolean).join(', ')
-    if (workplaceType === 'Remote') return place ? `Remote (${place})` : 'Remote'
-    if (workplaceType === 'Hybrid' && place) return `${place} (Hybrid)`
+    if (/^remote$/i.test(workplaceType || '')) return place ? `Remote (${place})` : 'Remote'
+    if (/^hybrid$/i.test(workplaceType || '') && place) return `${place} (Hybrid)`
     return place
 }
 
+const ObjectId = mongoose.Schema.Types.ObjectId
 const str = (max) => ({ type: String, trim: true, maxlength: max })
 
 const jobSchema = new mongoose.Schema({
@@ -62,8 +63,11 @@ const jobSchema = new mongoose.Schema({
     experienceMin: { type: Number, min: 0, max: 60 },
     experienceMax: { type: Number, min: 0, max: 60 },
     vacancies: { type: Number, min: 1, max: 10000 },
-    employmentType: { type: String, enum: EMPLOYMENT_TYPES },
-    workplaceType: { type: String, enum: WORKPLACE_TYPES },
+    // Text labels below are derived from the master refs on save (kept for the
+    // public UI, filters and recruiter flow). Enums were dropped: masters are authoritative.
+    employmentType: { type: String, trim: true, maxlength: 100 },
+    workplaceType: { type: String, trim: true, maxlength: 100 },
+    industry: { type: String, trim: true, maxlength: 150 },
 
     // --- location ---
     country: str(100),
@@ -75,7 +79,7 @@ const jobSchema = new mongoose.Schema({
     salaryMin: { type: Number, min: 0 },
     salaryMax: { type: Number, min: 0 },
     currency: { type: String, trim: true, uppercase: true, match: [/^[A-Z]{3}$/, 'Currency must be a 3-letter code'], default: 'INR' },
-    salaryPeriod: { type: String, enum: SALARY_PERIODS },
+    salaryPeriod: { type: String, trim: true, maxlength: 100 },
     salaryNegotiable: { type: Boolean, default: false },
     salaryUndisclosed: { type: Boolean, default: false },
 
@@ -91,6 +95,19 @@ const jobSchema = new mongoose.Schema({
     featured: { type: Boolean, default: false },
     publishAt: { type: Date },
     expiresAt: { type: Date },
+
+    // --- master-data references (see master/registry.js) ---
+    categoryId: { type: ObjectId, ref: 'MasterItem', default: undefined },
+    employmentTypeId: { type: ObjectId, ref: 'MasterItem', default: undefined },
+    workplaceTypeId: { type: ObjectId, ref: 'MasterItem', default: undefined },
+    locationIds: { type: [{ type: ObjectId, ref: 'Location' }], default: undefined },
+    clientId: { type: ObjectId, ref: 'Client', default: undefined },
+    experienceLevelId: { type: ObjectId, ref: 'ExperienceLevel', default: undefined },
+    skillIds: { type: [{ type: ObjectId, ref: 'MasterItem' }], default: undefined },
+    departmentId: { type: ObjectId, ref: 'MasterItem', default: undefined },
+    industryId: { type: ObjectId, ref: 'MasterItem', default: undefined },
+    currencyId: { type: ObjectId, ref: 'MasterItem', default: undefined },
+    salaryPeriodId: { type: ObjectId, ref: 'MasterItem', default: undefined },
 
     // --- internal (never returned publicly) ---
     internalNotes: { type: String, maxlength: 10000, select: false },
@@ -113,6 +130,9 @@ jobSchema.pre('validate', function () {
 
 jobSchema.index({ status: 1, createdAt: -1 })
 jobSchema.index({ visible: 1 })
+for (const f of ['categoryId', 'employmentTypeId', 'workplaceTypeId', 'locationIds', 'clientId', 'experienceLevelId', 'skillIds', 'departmentId', 'industryId', 'currencyId', 'salaryPeriodId']) {
+    jobSchema.index({ [f]: 1 }, { sparse: true })
+}
 
 // Effective status for documents that predate the `status` field
 export const effectiveStatus = (job) => job.status || (job.visible === false ? 'draft' : 'published')
@@ -128,7 +148,7 @@ export const publicJobFilter = (now = new Date()) => ({
 })
 
 // Fields never sent to anonymous visitors
-export const PUBLIC_EXCLUDE = '-internalNotes -createdBy -updatedBy -recruiterOwner -__v'
+export const PUBLIC_EXCLUDE = '-internalNotes -createdBy -updatedBy -recruiterOwner -clientId -__v'
 
 const Job = mongoose.model('Job', jobSchema)
 

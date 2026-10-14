@@ -18,22 +18,23 @@ const { createApp } = await import('../app.js')
 const Job = (await import('../models/Job.js')).default
 const JobApplication = (await import('../models/jobApplication.js')).default
 const Company = (await import('../models/Company.js')).default
+const { seedTestMasters } = await import('./fixtures.js')
 
-let mongod, app, adminToken, company, companyToken, otherCompanyToken
+let M, mongod, app, adminToken, company, companyToken, otherCompanyToken
 
 const validJob = (over = {}) => ({
     title: 'Senior Piping Engineer',
     description: '<p>Design piping systems.</p><script>alert(1)</script><img src=x onerror="alert(2)">',
-    category: 'Engineering',
-    employmentType: 'Full-time',
-    workplaceType: 'On-site',
-    city: 'Pune', state: 'Maharashtra', country: 'India',
-    salaryMin: 1200000, salaryMax: 1800000, salaryPeriod: 'Annual',
-    experienceMin: 5, experienceMax: 10, experienceLevel: 'Senior level',
+    categoryId: M.category.Engineering,
+    employmentTypeId: M.employmentType['Full-time'],
+    workplaceTypeId: M.workplaceType['On-site'],
+    locationIds: [M.location.Pune],
+    salaryMin: 1200000, salaryMax: 1800000, salaryPeriodId: M.salaryPeriod.Annual,
+    experienceMin: 5, experienceMax: 10, experienceLevelId: M.level['Senior level'],
     vacancies: 2,
-    skills: ['AutoCAD', 'PDMS', 'autocad'],
+    skillIds: [M.skill.AutoCAD, M.skill.PDMS, M.skill.AutoCAD],
     screeningQuestions: ['Notice period?'],
-    clientName: 'Acme Refineries',
+    clientId: M.client['Acme Refineries'],
     internalNotes: 'Client pays 8.33%',
     ...over,
 })
@@ -49,6 +50,7 @@ before(async () => {
     mongod = await MongoMemoryServer.create()
     await mongoose.connect(mongod.getUri(), { dbName: 'surehire-test' })
     await Job.init() // build unique indexes before tests rely on them
+    M = await seedTestMasters()
     app = createApp({ clerk: false })
     const login = await request(app).post('/api/admin/login').send({ email: 'admin@test.local', password: 'test-password-123456' })
     assert.equal(login.status, 200)
@@ -81,21 +83,26 @@ describe('admin job management', () => {
         assert.equal(job.salary, 1800000)
         assert.equal(job.currency, 'INR')
         assert.deepEqual(job.skills, ['AutoCAD', 'PDMS'])
+        assert.equal(job.category, 'Engineering')
+        assert.equal(job.employmentType, 'Full-time')
+        assert.equal(job.clientName, 'Acme Refineries')
+        assert.equal(String(job.categoryId), M.category.Engineering)
+        assert.deepEqual(job.skillIds.map(String), [M.skill.AutoCAD, M.skill.PDMS])
         assert.ok(!job.description.includes('<script'), 'script stripped')
         assert.ok(!job.description.includes('onerror'), 'handlers stripped')
         assert.equal(job.internalNotes, 'Client pays 8.33%')
     })
 
     test('2. rejects invalid data with 400 and field errors', async () => {
-        const res = await admin(request(app).post('/api/admin/jobs')).send({ title: '', description: '<p><br></p>', employmentType: 'Weekly', vacancies: 0, workplaceType: 'On-site' })
+        const res = await admin(request(app).post('/api/admin/jobs')).send({ title: '', description: '<p><br></p>', employmentTypeId: 'Weekly', vacancies: 0, workplaceTypeId: M.workplaceType['On-site'] })
         assert.equal(res.status, 400)
         assert.equal(res.body.success, false)
-        for (const f of ['title', 'description', 'employmentType', 'vacancies', 'city']) assert.ok(res.body.errors[f], `error for ${f}`)
+        for (const f of ['title', 'description', 'employmentTypeId', 'categoryId', 'vacancies', 'locationIds']) assert.ok(res.body.errors[f], `error for ${f}`)
         assert.equal(await Job.countDocuments(), 0)
     })
 
     test('remote job does not require city', async () => {
-        const job = await createJob({ workplaceType: 'Remote', city: '', state: '', country: '' })
+        const job = await createJob({ workplaceTypeId: M.workplaceType.Remote, locationIds: [] })
         assert.equal(job.location, 'Remote')
     })
 
@@ -125,8 +132,9 @@ describe('admin job management', () => {
 
     test('PATCH can clear an optional field and re-derives location', async () => {
         const job = await createJob()
-        const res = await admin(request(app).patch(`/api/admin/jobs/${job._id}`)).send({ clientName: '', workplaceType: 'Remote' })
+        const res = await admin(request(app).patch(`/api/admin/jobs/${job._id}`)).send({ clientId: '', workplaceTypeId: M.workplaceType.Remote })
         assert.equal(res.status, 200)
+        assert.equal(res.body.job.clientId, undefined)
         assert.equal(res.body.job.clientName, undefined)
         assert.match(res.body.job.location, /^Remote/)
     })
@@ -158,9 +166,9 @@ describe('admin job management', () => {
     })
 
     test('list: search, filter, sort, pagination and application counts', async () => {
-        const a = await createJob({ title: 'Alpha Welder', status: 'published', employmentType: 'Contract' })
+        const a = await createJob({ title: 'Alpha Welder', status: 'published', employmentTypeId: M.employmentType.Contract })
         await createJob({ title: 'Beta Fitter' })
-        await createJob({ title: 'Gamma Rigger', city: 'Mumbai' })
+        await createJob({ title: 'Gamma Rigger', locationIds: [M.location.Mumbai] })
         await JobApplication.create({ userId: 'u1', companyId: null, jobId: a._id, date: Date.now() })
         await JobApplication.create({ userId: 'u2', companyId: null, jobId: a._id, date: Date.now() })
 
@@ -193,11 +201,13 @@ describe('admin job management', () => {
         const list = await admin(request(app).get('/api/admin/jobs').query({ status: 'published' }))
         assert.equal(list.body.items[0].status, 'published')
         // first edit assigns a reference id without touching the legacy fields
-        const res = await admin(request(app).patch(`/api/admin/jobs/${legacy.insertedId}`)).send({ department: 'IT' })
+        const res = await admin(request(app).patch(`/api/admin/jobs/${legacy.insertedId}`)).send({ departmentId: M.department.IT })
         assert.equal(res.status, 200)
         assert.match(res.body.job.referenceId, /^SH-JOB-/)
         assert.equal(res.body.job.location, 'Bangalore')
         assert.equal(res.body.job.salary, 100000)
+        assert.equal(res.body.job.department, 'IT')
+        assert.equal(res.body.job.category, 'Programming', 'legacy text kept')
     })
 })
 
@@ -219,7 +229,7 @@ describe('authorization', () => {
         const archived = await createJob({ status: 'published' })
         await admin(request(app).post(`/api/admin/jobs/${archived._id}/archive`))
         const scheduled = await createJob({ status: 'published', publishAt: new Date(Date.now() + 86400000).toISOString() })
-        const expired = await Job.create({ ...validJob(), location: 'x', level: 'x', salary: 0, date: Date.now(), status: 'published', expiresAt: new Date(Date.now() - 1000) })
+        const expired = await Job.create({ title: 'Expired', description: '<p>x</p>', category: 'c', location: 'x', level: 'x', salary: 0, date: Date.now(), status: 'published', expiresAt: new Date(Date.now() - 1000) })
         for (const j of [draft, archived, scheduled, expired]) {
             assert.equal((await request(app).get(`/api/jobs/${j._id}`)).status, 404)
         }
@@ -261,6 +271,10 @@ describe('authorization', () => {
             .send({ title: 'Recruiter job', description: '<p>Hi</p><script>x()</script>', location: 'Bangalore', salary: 50000, level: 'Beginner level', category: 'Programming' })
         assert.equal(res.body.success, true, JSON.stringify(res.body))
         assert.equal(res.body.newJob.description, '<p>Hi</p>')
+        // names are linked to existing active masters (never created)
+        assert.equal(String(res.body.newJob.categoryId), M.category.Programming)
+        assert.equal(String(res.body.newJob.experienceLevelId), M.level['Beginner level'])
+        assert.equal(res.body.newJob.locationIds?.length || 0, 0, 'unknown location is not linked or created')
         const list = await request(app).get('/api/company/list-job').set('token', companyToken)
         assert.equal(list.body.jobsData.length, 1)
         assert.equal(list.body.jobsData[0].applicants, 0)

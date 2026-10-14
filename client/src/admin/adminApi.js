@@ -62,6 +62,28 @@ export const deleteAdminJob = (backendUrl, id) => adminRequest(backendUrl, { met
 // action: 'publish' | 'unpublish' | 'archive' | 'duplicate'
 export const adminJobAction = (backendUrl, id, action) => adminRequest(backendUrl, { method: 'post', url: `/jobs/${encodeURIComponent(id)}/${action}` })
 
+// Job applications + overview
+export const listAdminApplications = (backendUrl, params) => adminRequest(backendUrl, { method: 'get', url: '/applications', params })
+export const updateAdminApplication = (backendUrl, id, status) => adminRequest(backendUrl, { method: 'patch', url: `/applications/${encodeURIComponent(id)}`, data: { status } })
+export const getAdminOverview = (backendUrl) => adminRequest(backendUrl, { method: 'get', url: '/overview' })
+
 // Server error message (falls back to a generic one)
 export const apiErrorMessage = (error, fallback = 'Something went wrong') =>
     error?.response?.data?.message || (error?.response ? fallback : 'Network error. Please check your connection.')
+
+// ---------------------------------------------------------------------------
+// Dashboard, candidates, applications, audit logs, master data
+// ---------------------------------------------------------------------------
+export const getAdminDashboard = (backendUrl) => adminRequest(backendUrl, { method: 'get', url: '/dashboard' })
+export const listAdminCandidates = (backendUrl, params) => adminRequest(backendUrl, { method: 'get', url: '/candidates', params })
+export const getAdminCandidate = (backendUrl, id) => adminRequest(backendUrl, { method: 'get', url: `/candidates/${encodeURIComponent(id)}` })
+export const updateAdminApplicationStatus = (backendUrl, id, status) => adminRequest(backendUrl, { method: 'patch', url: `/applications/${encodeURIComponent(id)}`, data: { status } })
+export const listAdminAuditLogs = (backendUrl, params) => adminRequest(backendUrl, { method: 'get', url: '/audit-logs', params })
+
+export const listMasterTypes = (backendUrl) => adminRequest(backendUrl, { method: 'get', url: '/master' })
+export const listMaster = (backendUrl, type, params) => adminRequest(backendUrl, { method: 'get', url: `/master/${encodeURIComponent(type)}`, params })
+export const createMaster = (backendUrl, type, data) => adminRequest(backendUrl, { method: 'post', url: `/master/${encodeURIComponent(type)}`, data })
+export const updateMaster = (backendUrl, type, id, data) => adminRequest(backendUrl, { method: 'patch', url: `/master/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, data })
+export const deleteMaster = (backendUrl, type, id) => adminRequest(backendUrl, { method: 'delete', url: `/master/${encodeURIComponent(type)}/${encodeURIComponent(id)}` })
+// action: 'activate' | 'deactivate'
+export const setMasterActive = (backendUrl, type, id, active) => adminRequest(backendUrl, { method: 'post', url: `/master/${encodeURIComponent(type)}/${encodeURIComponent(id)}/${active ? 'activate' : 'deactivate'}` })

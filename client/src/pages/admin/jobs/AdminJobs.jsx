@@ -1,16 +1,27 @@
 import React, { useCallback, useContext, useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Copy, Eye, Pencil, Plus, RefreshCw, Search, Archive, Trash2, Send, EyeOff } from 'lucide-react'
+import { Copy, Eye, Pencil, Plus, Search, Archive, Trash2, Send, EyeOff } from 'lucide-react'
 import { AppContext } from '../../../context/AppContext'
 import { apiErrorMessage, isAuthError, listAdminJobs } from '../../../admin/adminApi'
-import { EMPLOYMENT_TYPES, JOB_STATUSES, WORKPLACE_TYPES, JOB_CATEGORIES } from '../../../admin/jobOptions'
+import { JOB_STATUSES } from '../../../admin/jobOptions'
+import { masterLabel, useAdminMasters } from '../../../admin/useMasters'
+import { PageHeader } from '../ui/AdminUI'
+
+const FILTER_MASTERS = [
+    { key: 'categoryId', type: 'categories', all: 'All categories' },
+    { key: 'employmentTypeId', type: 'employment-types', all: 'All employment types' },
+    { key: 'workplaceTypeId', type: 'workplace-types', all: 'All workplaces' },
+    { key: 'locationId', type: 'locations', all: 'All locations' },
+    { key: 'clientId', type: 'clients', all: 'All clients' },
+]
+const FILTER_MASTER_TYPES = FILTER_MASTERS.map(f => f.type)
 import usePageMeta from '../../../hooks/usePageMeta'
 import useAdminAuthError from './useAdminAuthError'
 import JobStatusBadge from './JobStatusBadge'
 import { runJobAction } from './jobActions'
 import { formatDate } from '../../../utils/jobFormat'
 
-const FILTER_KEYS = ['q', 'status', 'employmentType', 'workplaceType', 'category', 'sort', 'order', 'page']
+const FILTER_KEYS = ['q', 'status', 'categoryId', 'employmentTypeId', 'workplaceTypeId', 'locationId', 'clientId', 'expired', 'sort', 'order', 'page']
 const selectClass = 'border border-gray-300 rounded px-2 py-1.5 text-sm bg-white'
 
 const IconButton = ({ title, onClick, children, danger, disabled }) => (
@@ -26,6 +37,7 @@ const AdminJobs = () => {
     const navigate = useNavigate()
     const onAuthError = useAdminAuthError()
     const [params, setParams] = useSearchParams()
+    const masters = useAdminMasters(backendUrl, FILTER_MASTER_TYPES)
 
     // Filters live in the URL so refresh/back keep them
     const filters = Object.fromEntries(FILTER_KEYS.map(k => [k, params.get(k) || '']))
@@ -73,44 +85,36 @@ const AdminJobs = () => {
 
     const sortValue = `${filters.sort || 'createdAt'}:${filters.order || 'desc'}`
     const page = Number(filters.page) || 1
-    const hasFilters = ['q', 'status', 'employmentType', 'workplaceType', 'category'].some(k => filters[k])
+    const hasFilters = ['q', 'status', 'categoryId', 'employmentTypeId', 'workplaceTypeId', 'locationId', 'clientId', 'expired'].some(k => filters[k])
 
     return (
         <div>
-            <div className='flex flex-wrap items-center justify-between gap-3 mb-4'>
-                <h1 className='text-xl font-semibold'>Jobs</h1>
-                <div className='flex gap-2'>
-                    <button type='button' onClick={load} className='flex items-center gap-1 border border-gray-300 rounded px-3 py-1.5 text-sm hover:bg-gray-100'>
-                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
-                    </button>
-                    <Link to='/admin/jobs/new' className='flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-1.5 text-sm'>
-                        <Plus size={14} /> New job
-                    </Link>
-                </div>
-            </div>
+            <PageHeader title='Jobs' breadcrumbs={[{ label: 'Admin', to: '/admin/dashboard' }, { label: 'Jobs' }]} onRefresh={load} loading={loading}
+                actions={<Link to='/admin/jobs/new' className='flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-1.5 text-sm'><Plus size={14} /> New job</Link>} />
 
             <div className='flex flex-wrap items-center gap-2 mb-4'>
                 <form onSubmit={onSearch} className='flex items-center border border-gray-300 rounded bg-white'>
                     <input value={searchInput} onChange={e => setSearchInput(e.target.value)} placeholder='Title, reference, client, city' aria-label='Search jobs'
                         className='px-3 py-1.5 text-sm outline-none w-60' maxLength={100} />
-                    <button type='submit' aria-label='Search' className='px-2 text-gray-500'><Search size={16} /></button>
+                    <button type='submit' aria-label='Search' className='px-2 min-h-[32px] text-gray-500'><Search size={16} /></button>
                 </form>
                 <select aria-label='Status' value={filters.status} onChange={e => update({ status: e.target.value })} className={selectClass}>
                     <option value=''>All statuses</option>
                     {JOB_STATUSES.map(s => <option key={s} value={s} className='capitalize'>{s}</option>)}
                 </select>
-                <select aria-label='Employment type' value={filters.employmentType} onChange={e => update({ employmentType: e.target.value })} className={selectClass}>
-                    <option value=''>All employment types</option>
-                    {EMPLOYMENT_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <select aria-label='Workplace type' value={filters.workplaceType} onChange={e => update({ workplaceType: e.target.value })} className={selectClass}>
-                    <option value=''>All workplaces</option>
-                    {WORKPLACE_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <select aria-label='Category' value={filters.category} onChange={e => update({ category: e.target.value })} className={selectClass}>
-                    <option value=''>All categories</option>
-                    {JOB_CATEGORIES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                {FILTER_MASTERS.map(f => {
+                    const list = masters.data[f.type] || []
+                    // keep a selected (possibly inactive) value visible
+                    const shown = list.filter(m => m.active !== false || m._id === filters[f.key])
+                    return (
+                        <select key={f.key} aria-label={f.all} value={filters[f.key]} onChange={e => update({ [f.key]: e.target.value })} className={selectClass}>
+                            <option value=''>{f.all}</option>
+                            {!shown.length && !masters.loading && <option value='' disabled>No {f.type.replace('-', ' ')} yet - add in Master data</option>}
+                            {shown.map(m => <option key={m._id} value={m._id}>{masterLabel(m, f.type)}{m.active === false ? ' (inactive)' : ''}</option>)}
+                        </select>
+                    )
+                })}
+                {filters.expired && <span className='text-xs bg-amber-100 text-amber-800 rounded px-2 py-1'>Expired only</span>}
                 <select aria-label='Sort' value={sortValue} onChange={e => { const [sort, order] = e.target.value.split(':'); update({ sort, order }) }} className={selectClass}>
                     <option value='createdAt:desc'>Newest first</option>
                     <option value='createdAt:asc'>Oldest first</option>
@@ -135,7 +139,8 @@ const AdminJobs = () => {
                     {!hasFilters && <Link to='/admin/jobs/new' className='text-blue-600 hover:underline'>Create the first job</Link>}
                 </div>
             ) : (
-                <div className={`overflow-x-auto bg-white border border-gray-200 rounded-lg shadow-sm ${loading ? 'opacity-60' : ''}`}>
+                <div aria-busy={loading} className={`relative overflow-x-auto bg-white border border-gray-200 rounded-lg shadow-sm ${loading ? 'opacity-60 pointer-events-none' : ''}`}>
+                    {loading && <div className='absolute inset-0 z-10 flex items-start justify-center pt-10 bg-white/60' role='status' aria-label='Loading jobs'><div className='w-8 h-8 border-4 border-gray-300 border-t-blue-400 rounded-full animate-spin' /></div>}
                     <table className='min-w-full text-sm'>
                         <thead className='bg-gray-50 text-left text-gray-600'>
                             <tr>
@@ -158,13 +163,13 @@ const AdminJobs = () => {
                                         <Link to={`/admin/jobs/${job._id}`} className='hover:text-blue-600 line-clamp-2'>{job.title}</Link>
                                         {job.featured && <span className='ml-1 text-xs text-amber-700'>★</span>}
                                     </td>
-                                    <td className='px-3 py-2 font-mono text-xs whitespace-nowrap'>{job.referenceId || <span className='text-gray-400'>legacy</span>}</td>
+                                    <td className='px-3 py-2 font-mono text-xs whitespace-nowrap'>{job.referenceId || <span className='text-gray-400 font-sans'>Not assigned</span>}</td>
                                     <td className='px-3 py-2'>{job.clientName || job.companyId?.name || '-'}{job.department && <span className='block text-xs text-gray-500'>{job.department}</span>}</td>
                                     <td className='px-3 py-2'>{job.location || '-'}</td>
-                                    <td className='px-3 py-2 whitespace-nowrap'>{job.employmentType || '-'}</td>
+                                    <td className='px-3 py-2 whitespace-nowrap'>{job.employmentType || job.employmentTypeId?.name || <span className='text-gray-400'>Not set</span>}</td>
                                     <td className='px-3 py-2'><JobStatusBadge status={job.status} /></td>
                                     <td className='px-3 py-2 whitespace-nowrap'>{formatDate(job.createdAt || job.date) || '-'}</td>
-                                    <td className='px-3 py-2 whitespace-nowrap'>{formatDate(job.applicationDeadline, { utc: true }) || '-'}</td>
+                                    <td className='px-3 py-2 whitespace-nowrap'>{formatDate(job.applicationDeadline, { utc: true }) || <span className='text-gray-400'>None</span>}</td>
                                     <td className='px-3 py-2 text-right'>{job.applicationCount}</td>
                                     <td className='px-3 py-2'>
                                         <div className='flex justify-end gap-0.5'>

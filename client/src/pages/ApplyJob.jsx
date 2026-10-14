@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useRef, useContext, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
 import Loading from '../components/Loading';
@@ -22,6 +22,8 @@ const ApplyJob = () => {
   const [jobData, setJobData] = useState(null)
   const [isAlreadyApplied, setIsAlreadyApplied] = useState(false)
   const [notFound, setNotFound] = useState(false)
+  const [answers, setAnswers] = useState([])
+  const [showQuestions, setShowQuestions] = useState(false)
 
   const { jobs, backendUrl, userData, userApplications, fetchUserApplications } = useContext(AppContext)
 
@@ -49,7 +51,15 @@ const ApplyJob = () => {
 
   }
 
-const applyHandler = async () => {
+// Duplicate-submit guard: ignore clicks while a request is in flight
+const [busy, setBusy] = useState(false)
+const busyRef = useRef(false)
+const applyHandler = async (...args) => {
+  if (busyRef.current) { args[0]?.preventDefault?.(); return }
+  busyRef.current = true; setBusy(true)
+  try { return await applyHandlerRun(...args) } finally { busyRef.current = false; setBusy(false) }
+}
+const applyHandlerRun = async () => {
     try {
 
       if (!userData) {
@@ -61,22 +71,40 @@ const applyHandler = async () => {
         return toast.error("Upload your resume to apply for job")
       }
 
+      if (isAlreadyApplied) {
+        return toast.info("You have already applied for this job")
+      }
+
+      // Jobs with screening questions: collect one answer per question first
+      const questions = Array.isArray(jobData.screeningQuestions) ? jobData.screeningQuestions : []
+      if (questions.length) {
+        if (!showQuestions) {
+          setShowQuestions(true)
+          setTimeout(() => document.getElementById('screening-questions')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+          return
+        }
+        if (questions.some((_, i) => !(answers[i] || '').trim())) {
+          return toast.error("Please answer all screening questions")
+        }
+      }
+
       const token = await getToken();
 
       const {data} = await axios.post(backendUrl+'/api/users/apply',
-        {jobId:  jobData._id },
+        { jobId: jobData._id, ...(questions.length ? { answers: questions.map((_, i) => answers[i].trim()) } : {}) },
         {headers: {Authorization: `Bearer ${token}`}}
       )
 
       if(data.success){
         toast.success(data.message)
+        setShowQuestions(false)
         fetchUserApplications()
       } else{
         toast.error(data.message)
       }
 
     } catch (error) {
-      toast.error(error.message)
+      toast.error(error?.response?.data?.message || error.message)
     }
 }
 
@@ -98,8 +126,29 @@ const checkAlreadyApplied = () => {
   },[jobData,userApplications, id])
 
 
+  const screeningForm = () => (showQuestions && !isAlreadyApplied && jobData?.screeningQuestions?.length > 0) ? (
+    <div id='screening-questions' className='mt-8 border border-blue-200 bg-blue-50/40 rounded-lg p-5 max-w-2xl'>
+      <h2 className='font-medium text-lg mb-1'>Screening questions</h2>
+      <p className='text-sm text-gray-600 mb-4'>Please answer these before submitting your application.</p>
+      {jobData.screeningQuestions.map((q, i) => (
+        <label key={i} className='block mb-4'>
+          <span className='block text-sm font-medium text-gray-800 mb-1'>{i + 1}. {q} <span className='text-red-500'>*</span></span>
+          <textarea
+            rows={2}
+            maxLength={2000}
+            required
+            value={answers[i] || ''}
+            onChange={e => setAnswers(prev => { const next = [...prev]; next[i] = e.target.value; return next })}
+            className='w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white'
+          />
+        </label>
+      ))}
+      <button onClick={applyHandler} disabled={busy} className='disabled:opacity-60 bg-blue-600 p-2.5 px-10 text-white rounded'>Submit application</button>
+    </div>
+  ) : null
+
   const applyButton = (extra = '') => (
-    <button onClick={applyHandler} className={`bg-blue-600 p-2.5 px-10 text-white rounded ${extra}`}>{isAlreadyApplied ? 'Already Applied':'Apply Now'}</button>
+    <button onClick={applyHandler} disabled={busy} className={`disabled:opacity-60 bg-blue-600 p-2.5 px-10 text-white rounded ${extra}`}>{isAlreadyApplied ? 'Already Applied':'Apply Now'}</button>
   )
 
   // Other public jobs from the same company (or, for SureHire-posted jobs, other SureHire jobs)
@@ -131,7 +180,7 @@ const checkAlreadyApplied = () => {
         <JobDetails
           job={jobData}
           actions={applyButton()}
-          bottomAction={applyButton('mt-10')}
+          bottomAction={<>{applyButton('mt-10')}{screeningForm()}</>}
           aside={<>
             <h2>More jobs from {companyName(jobData)}</h2>
             {moreJobs.map((job) => <JobCard key={job._id} job={job} />)}

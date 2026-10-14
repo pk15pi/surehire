@@ -1,15 +1,33 @@
 import express from 'express'
 import { changeJobApplicationStatus, changeVisiblity, getCompanyData, getCompanyJobApplicants, getCompanyPostedJobs, loginCompany, postJob, registerCompany } from '../controllers/companyControllers.js'
-import upload from '../config/multer.js'
+import { loginWithOtp, requestOtp, resendVerification, resetPassword, verifyEmail, verifyResetOtp } from '../controllers/companyAuthController.js'
+import { imageUpload, single } from '../config/multer.js'
+import { companyAuthRateLimiter, otpSendRateLimiter, otpVerifyRateLimiter } from '../middleware/rateLimit.js'
 import { protectCompany } from '../middleware/authMiddleware.js'
 
 const router = express.Router()
 
-// Register a company
-router.post('/register',upload.single('image'), registerCompany)
+// Recruiter self sign-up is off unless ALLOW_RECRUITER_SIGNUP=true (checked before any upload)
+const signupEnabled = (req, res, next) => process.env.ALLOW_RECRUITER_SIGNUP === 'true'
+    ? next() : res.status(403).json({ success: false, message: 'Registration is not available' })
 
-// Company login
-router.post('/login', loginCompany)
+// Register a company
+router.post('/register', signupEnabled, companyAuthRateLimiter, single(imageUpload, 'image'), registerCompany)
+
+// Company login (email or mobile + password)
+router.post('/login', companyAuthRateLimiter, loginCompany)
+
+// One-time codes (login / reset / signup mobile check) and passwordless login
+router.post('/auth/otp/request', otpSendRateLimiter, requestOtp)
+router.post('/auth/otp/login', otpVerifyRateLimiter, loginWithOtp)
+
+// Forgot password: request code (purpose=reset) -> verify -> set new password
+router.post('/auth/password/verify-otp', otpVerifyRateLimiter, verifyResetOtp)
+router.post('/auth/password/reset', otpVerifyRateLimiter, resetPassword)
+
+// Email confirmation link
+router.post('/auth/verify-email', otpVerifyRateLimiter, verifyEmail)
+router.post('/auth/verify-email/resend', otpSendRateLimiter, resendVerification)
 
 // get company data
 router.get('/company', protectCompany, getCompanyData)

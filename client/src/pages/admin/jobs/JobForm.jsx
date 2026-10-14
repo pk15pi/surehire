@@ -1,10 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useContext, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import RichTextEditor from './RichTextEditor'
 import TagInput from './TagInput'
-import {
-    EMPLOYMENT_TYPES, WORKPLACE_TYPES, SALARY_PERIODS, EXPERIENCE_LEVELS, JOB_CATEGORIES, diffForm,
-} from '../../../admin/jobOptions'
+import { AppContext } from '../../../context/AppContext'
+import { JOB_MASTER_FIELDS, diffForm, matchLegacyToMasters } from '../../../admin/jobOptions'
+import { useAdminMasters } from '../../../admin/useMasters'
+import { MasterMultiSelect, MasterSelect } from '../ui/MasterSelect'
 import { validateJobForm } from './jobValidation'
+
+const MASTER_TYPES = [...new Set(Object.values(JOB_MASTER_FIELDS))]
 
 const inputClass = (err) => `w-full px-3 py-2 border-2 rounded bg-white disabled:bg-gray-100 disabled:text-gray-400 ${err ? 'border-red-400' : 'border-gray-300'}`
 
@@ -35,9 +39,21 @@ const Group = ({ title, children }) => (
  *  submitting  disables the form while a request is in flight
  *  serverErrors field errors returned by the API
  */
-const JobForm = ({ initial, mode, onSubmit, onCancel, submitting, serverErrors, legacyLocation, onDirtyChange }) => {
+const JobForm = ({ initial, mode, onSubmit, onCancel, submitting, serverErrors, legacyLocation, legacy = {}, suggested, onDirtyChange }) => {
+    const { backendUrl } = useContext(AppContext)
+    const masters = useAdminMasters(backendUrl, MASTER_TYPES)
+    const items = (field) => masters.data[JOB_MASTER_FIELDS[field]] || []
     const [form, setForm] = useState(initial)
     const [errors, setErrors] = useState({})
+
+    // Preselect masters that match legacy text once options have loaded. Not saved
+    // until the admin clicks Save (the fields show as changed and are hinted).
+    const [matched, setMatched] = useState(null)
+    if (matched === null && mode === 'edit' && !masters.loading && Object.keys(masters.data).length) {
+        const found = matchLegacyToMasters(form, legacy, items, suggested)
+        setMatched(found)
+        if (Object.keys(found).length) setForm(f => ({ ...f, ...found }))
+    }
 
     // Merge server-side field errors into the inline errors (input is preserved).
     // Adjusting state during render when the prop changes (no effect needed).
@@ -68,7 +84,7 @@ const JobForm = ({ initial, mode, onSubmit, onCancel, submitting, serverErrors, 
     const submit = async (e) => {
         e.preventDefault()
         if (submitting) return
-        const found = validateJobForm(form, { legacyLocation })
+        const found = validateJobForm(form, { legacyLocation, isRemote: remote, isCreate: mode === 'create' })
         setErrors(found)
         if (Object.keys(found).length) {
             const first = document.getElementById(`job-${Object.keys(found)[0]}`)
@@ -85,13 +101,34 @@ const JobForm = ({ initial, mode, onSubmit, onCancel, submitting, serverErrors, 
         onCancel()
     }
 
-    const remote = form.workplaceType === 'Remote'
+    const workplace = items('workplaceTypeId').find(w => String(w._id) === String(form.workplaceTypeId))
+    const remote = /^remote$/i.test(workplace?.name || '')
     const undisclosed = form.salaryUndisclosed
     const err = (k) => errors[k]
     const aria = (k) => ({ id: `job-${k}`, 'aria-invalid': err(k) ? true : undefined, 'aria-describedby': err(k) ? `job-${k}-error` : undefined })
 
+    // Master select / multi-select wired to a form field
+    const pick = (field, { required, placeholder, multi } = {}) => {
+        const common = {
+            id: `job-${field}`, items: items(field), type: JOB_MASTER_FIELDS[field], value: form[field], onChange: set(field),
+            className: inputClass(err(field)), invalid: !!err(field), describedBy: err(field) ? `job-${field}-error` : undefined,
+            placeholder: placeholder || (required ? 'Select...' : 'Not specified'),
+        }
+        return multi ? <MasterMultiSelect {...common} /> : <MasterSelect {...common} />
+    }
+    const legacyHint = (field) => !legacy[field] ? undefined
+        : matched?.[field] && JSON.stringify(form[field]) === JSON.stringify(matched[field]) ? `Matched from legacy text "${legacy[field]}" - save to link it`
+        : `Current (not linked to master data): ${legacy[field]}`
+
     return (
         <form onSubmit={submit} noValidate className='flex flex-col gap-6'>
+            {masters.error && (
+                <div className='bg-amber-50 border border-amber-200 text-amber-800 rounded px-4 py-3 text-sm flex justify-between' role='alert'>
+                    <span>{masters.error === 'auth' ? 'Your session expired. Please log in again.' : 'Could not load master data options.'}</span>
+                    <button type='button' onClick={masters.refresh} className='underline'>Retry</button>
+                </div>
+            )}
+            {masters.loading && !Object.keys(masters.data).length && <p className='text-sm text-gray-500'>Loading options...</p>}
             {Object.keys(errors).length > 0 && (
                 <div className='bg-red-50 border border-red-200 text-red-700 rounded px-4 py-3 text-sm' role='alert'>
                     Please fix the highlighted fields.
@@ -105,28 +142,23 @@ const JobForm = ({ initial, mode, onSubmit, onCancel, submitting, serverErrors, 
                     <Field id='job-referenceId' label='Reference ID' error={err('referenceId')} hint={mode === 'create' ? 'Leave blank to auto-generate (SH-JOB-YYMMDD-XXXX)' : undefined}>
                         <input {...aria('referenceId')} value={form.referenceId} onChange={set('referenceId')} placeholder='SH-JOB-261013-AB12' className={`${inputClass(err('referenceId'))} font-mono uppercase`} />
                     </Field>
-                    <Field id='job-category' label='Category' error={err('category')}>
-                        <select {...aria('category')} value={form.category} onChange={set('category')} className={inputClass(err('category'))}>
-                            {[...new Set([...JOB_CATEGORIES, form.category].filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                    <Field id='job-categoryId' label='Category' required error={err('categoryId')} hint={legacyHint('categoryId')}>
+                        {pick('categoryId', { required: true })}
                     </Field>
-                    <Field id='job-clientName' label='Client / hiring organisation' error={err('clientName')} hint='Shown publicly instead of a recruiter company'>
-                        <input {...aria('clientName')} value={form.clientName} onChange={set('clientName')} maxLength={200} className={inputClass(err('clientName'))} />
+                    <Field id='job-clientId' label='Client / hiring organisation' error={err('clientId')} hint={legacyHint('clientId') || 'Shown publicly unless the client is confidential'}>
+                        {pick('clientId')}
                     </Field>
-                    <Field id='job-department' label='Department' error={err('department')}>
-                        <input {...aria('department')} value={form.department} onChange={set('department')} maxLength={150} className={inputClass(err('department'))} />
+                    <Field id='job-departmentId' label='Department' error={err('departmentId')} hint={legacyHint('departmentId')}>
+                        {pick('departmentId')}
                     </Field>
-                    <Field id='job-employmentType' label='Employment type' error={err('employmentType')}>
-                        <select {...aria('employmentType')} value={form.employmentType} onChange={set('employmentType')} className={inputClass(err('employmentType'))}>
-                            <option value=''>Not specified</option>
-                            {EMPLOYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
+                    <Field id='job-industryId' label='Industry' error={err('industryId')} hint={legacyHint('industryId')}>
+                        {pick('industryId')}
                     </Field>
-                    <Field id='job-experienceLevel' label='Experience level' error={err('experienceLevel')}>
-                        <select {...aria('experienceLevel')} value={form.experienceLevel} onChange={set('experienceLevel')} className={inputClass(err('experienceLevel'))}>
-                            <option value=''>Not specified</option>
-                            {[...new Set([...EXPERIENCE_LEVELS, form.experienceLevel].filter(Boolean))].map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
+                    <Field id='job-employmentTypeId' label='Employment type' required error={err('employmentTypeId')} hint={legacyHint('employmentTypeId')}>
+                        {pick('employmentTypeId', { required: true })}
+                    </Field>
+                    <Field id='job-experienceLevelId' label='Experience level' error={err('experienceLevelId')} hint={legacyHint('experienceLevelId')}>
+                        {pick('experienceLevelId')}
                     </Field>
                     <div className='grid grid-cols-3 gap-3 md:col-span-2'>
                         <Field id='job-experienceMin' label='Min experience (yrs)' error={err('experienceMin')}>
@@ -148,32 +180,19 @@ const JobForm = ({ initial, mode, onSubmit, onCancel, submitting, serverErrors, 
                     <Field id='job-qualifications' label='Qualifications' error={err('qualifications')} className='md:col-span-2'>
                         <RichTextEditor id='job-qualifications' value={initial.qualifications} onChange={set('qualifications')} invalid={!!err('qualifications')} />
                     </Field>
-                    <Field id='job-skills' label='Skills' error={err('skills')} hint='Press Enter or comma to add' className='md:col-span-2'>
-                        <TagInput id='job-skills' value={form.skills} onChange={set('skills')} placeholder='e.g. AutoCAD' invalid={!!err('skills')} />
+                    <Field id='job-skillIds' label='Skills' error={err('skillIds')} hint={legacyHint('skillIds')} className='md:col-span-2'>
+                        {pick('skillIds', { multi: true, placeholder: 'Add a skill...' })}
                     </Field>
                 </Group>
 
                 <Group title='Location & compensation'>
-                    <Field id='job-workplaceType' label='Workplace type' error={err('workplaceType')}>
-                        <select {...aria('workplaceType')} value={form.workplaceType} onChange={set('workplaceType')} className={inputClass(err('workplaceType'))}>
-                            {WORKPLACE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
+                    <Field id='job-workplaceTypeId' label='Workplace type' required error={err('workplaceTypeId')} hint={legacyHint('workplaceTypeId')}>
+                        {pick('workplaceTypeId', { required: true })}
                     </Field>
-                    <Field id='job-country' label='Country' error={err('country')}>
-                        <input {...aria('country')} value={form.country} onChange={set('country')} maxLength={100} className={inputClass(err('country'))} />
+                    <Field id='job-locationIds' label='Locations' required={!remote && !legacyLocation} error={err('locationIds')} className='md:col-span-2'
+                        hint={legacyLocation && form.locationIds.length && matched?.locationIds ? legacyHint('locationIds') : legacyLocation && !form.locationIds.length ? `Current location (not linked): ${legacyLocation}` : (remote ? 'Optional for remote jobs' : 'The first location is the primary one')}>
+                        {pick('locationIds', { multi: true, placeholder: 'Add a location...' })}
                     </Field>
-                    <Field id='job-state' label='State' error={err('state')}>
-                        <input {...aria('state')} value={form.state} onChange={set('state')} maxLength={100} className={inputClass(err('state'))} />
-                    </Field>
-                    <Field id='job-city' label='City' required={!remote && !legacyLocation} error={err('city')}
-                        hint={legacyLocation && !form.city ? `Current location: ${legacyLocation}` : (remote ? 'Optional for remote jobs' : undefined)}>
-                        <input {...aria('city')} value={form.city} onChange={set('city')} maxLength={100} className={inputClass(err('city'))} />
-                    </Field>
-                    {!remote && (
-                        <Field id='job-address' label='Address' error={err('address')} className='md:col-span-2'>
-                            <input {...aria('address')} value={form.address} onChange={set('address')} maxLength={500} className={inputClass(err('address'))} />
-                        </Field>
-                    )}
                     <div className='md:col-span-2 flex flex-wrap gap-6 text-sm'>
                         <label className='flex items-center gap-2'><input type='checkbox' checked={form.salaryUndisclosed} onChange={set('salaryUndisclosed')} className='scale-125' /> Salary not disclosed</label>
                         <label className='flex items-center gap-2'><input type='checkbox' checked={form.salaryNegotiable} onChange={set('salaryNegotiable')} className='scale-125' /> Negotiable</label>
@@ -187,14 +206,11 @@ const JobForm = ({ initial, mode, onSubmit, onCancel, submitting, serverErrors, 
                         </Field>
                     </div>
                     <div className='grid grid-cols-2 gap-3'>
-                        <Field id='job-currency' label='Currency' error={err('currency')}>
-                            <input {...aria('currency')} value={form.currency} onChange={set('currency')} maxLength={3} disabled={undisclosed} className={`${inputClass(err('currency'))} uppercase`} />
+                        <Field id='job-currencyId' label='Currency' error={err('currencyId')} hint={legacyHint('currencyId')}>
+                            <MasterSelect id='job-currencyId' items={items('currencyId')} type='currencies' value={form.currencyId} onChange={set('currencyId')} disabled={undisclosed} placeholder='Default (INR)' className={inputClass(err('currencyId'))} />
                         </Field>
-                        <Field id='job-salaryPeriod' label='Period' error={err('salaryPeriod')}>
-                            <select {...aria('salaryPeriod')} value={form.salaryPeriod} onChange={set('salaryPeriod')} disabled={undisclosed} className={inputClass(err('salaryPeriod'))}>
-                                <option value=''>Not specified</option>
-                                {SALARY_PERIODS.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
+                        <Field id='job-salaryPeriodId' label='Period' error={err('salaryPeriodId')} hint={legacyHint('salaryPeriodId')}>
+                            <MasterSelect id='job-salaryPeriodId' items={items('salaryPeriodId')} type='salary-periods' value={form.salaryPeriodId} onChange={set('salaryPeriodId')} disabled={undisclosed} className={inputClass(err('salaryPeriodId'))} />
                         </Field>
                     </div>
                 </Group>
@@ -247,6 +263,7 @@ const JobForm = ({ initial, mode, onSubmit, onCancel, submitting, serverErrors, 
                 </Group>
             </fieldset>
 
+            <p className='text-xs text-gray-500'>Missing an option? Add it under <Link to='/admin/master' className='text-blue-600 hover:underline'>Master data</Link> (options are never created from this form).</p>
             <div className='flex flex-wrap gap-3 justify-end sticky bottom-0 bg-gray-50/95 py-3 border-t'>
                 <button type='button' onClick={cancel} disabled={submitting} className='border border-gray-300 rounded px-5 py-2 text-sm hover:bg-gray-100 disabled:opacity-50'>Cancel</button>
                 <button type='submit' disabled={submitting || (mode === 'edit' && !dirty)} className='bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded px-6 py-2 text-sm'>

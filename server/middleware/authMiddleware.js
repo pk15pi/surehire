@@ -12,15 +12,17 @@ export const protectCompany = async (req, res, next) => {
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET)
 
-        req.company = await Company.findById(decoded.id).select('-password')
+        const company = await Company.findById(decoded.id).select('-password')
 
-        if (!req.company) {
+        // Reject missing accounts, suspended accounts and sessions revoked by a password reset
+        if (!company || company.status === 'suspended' || (decoded.tv || 0) !== (company.tokenVersion || 0)) {
             return res.json({success:false, message:'Not Authorized, Login Again'})
         }
 
+        req.company = company
         next()
 
     } catch (error) {
-        res.json({success:false, message: error.message})
+        res.json({success:false, message:'Not Authorized, Login Again'})
     }
 }

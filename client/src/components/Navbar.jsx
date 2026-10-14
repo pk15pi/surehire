@@ -24,7 +24,7 @@ const Navbar = () => {
 
   const navigate = useNavigate()
 
-  const { setShowRecruiterLogin, setShowScheduleCall } = useContext(AppContext)
+  const { setShowScheduleCall } = useContext(AppContext)
 
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -44,7 +44,7 @@ const Navbar = () => {
       <UserButton />
     </div>
     : <div className='flex items-center gap-4 text-sm'>
-      <button onClick={() => { setMobileOpen(false); setShowRecruiterLogin(true) }} className='text-gray-600 whitespace-nowrap'>Recruiter Login</button>
+      {/* Recruiter Login hidden (invite-only); the modal and /dashboard still work */}
       <button onClick={() => { setMobileOpen(false); openSignIn() }} className='border border-blue-600 text-blue-600 px-5 py-1.5 rounded-full'>Login</button>
     </div>
 
@@ -54,17 +54,17 @@ const Navbar = () => {
         <img onClick={() => navigate('/')} className='cursor-pointer max-sm:w-32' src={assets.logo} alt="SureHire" />
 
         {/* Desktop links */}
-        <nav className='hidden lg:flex items-center gap-5' aria-label='Main'>
+        <nav className='hidden xl:flex items-center gap-5' aria-label='Main'>
           {NAV_LINKS.map(l => <NavLink key={l.to} to={l.to} end={l.end} className={linkClass}>{l.label}</NavLink>)}
         </nav>
 
-        <div className='flex items-center gap-3 lg:gap-4'>
-          <div className='hidden lg:block'>{authArea}</div>
-          <button onClick={openScheduleCall}
+        <div className='flex items-center gap-3 xl:gap-4'>
+          <div className='hidden xl:block'>{authArea}</div>
+          <button onClick={openScheduleCall} aria-label='Schedule a Call'
             className='flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-5 py-2 rounded-full text-sm font-medium shadow whitespace-nowrap'>
             <PhoneCall size={16} /> <span className='max-[380px]:hidden'>Schedule a Call</span>
           </button>
-          <button className='lg:hidden text-gray-700' onClick={() => setMobileOpen(o => !o)}
+          <button className='xl:hidden text-gray-700 p-1' onClick={() => setMobileOpen(o => !o)}
             aria-label={mobileOpen ? 'Close menu' : 'Open menu'} aria-expanded={mobileOpen}>
             {mobileOpen ? <X size={26} /> : <Menu size={26} />}
           </button>
@@ -73,7 +73,7 @@ const Navbar = () => {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className='lg:hidden container px-4 mx-auto mt-4 border-t pt-4 flex flex-col gap-3'>
+        <div className='xl:hidden container px-4 mx-auto mt-4 border-t pt-4 flex flex-col gap-3'>
           {NAV_LINKS.map(l => (
             <NavLink key={l.to} to={l.to} end={l.end} className={linkClass} onClick={() => setMobileOpen(false)}>{l.label}</NavLink>
           ))}

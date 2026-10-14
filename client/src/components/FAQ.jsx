@@ -9,7 +9,7 @@ const FAQS = [
     },
     {
         q: 'How do I share a hiring requirement?',
-        a: <>Fill in the <Link to='/hire-engineers' className='text-blue-600 underline'>Hire Engineers</Link> form with the role, location, number of positions and timeline. You can optionally attach a job description (PDF or DOCX). Our team will contact you to discuss the requirement.</>,
+        a: <>Fill in the <Link to='/hire-engineers' className='text-blue-600 underline'>Hire Talent</Link> form with the role, location, number of positions and timeline. You can optionally attach a job description (PDF or DOCX). Our team will contact you to discuss the requirement.</>,
     },
     {
         q: 'How do I submit my resume?',

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react'
+import React, { useRef, useContext, useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
 import { assets, jobsApplied } from '../assets/assets'
 import moment from 'moment'
@@ -18,10 +18,29 @@ const Applications = () => {
 
   const {backendUrl, userData, userApplications, fetchUserData, fetchUserApplications} = useContext(AppContext)
 
-  const updateResume = async () => {
+  // Duplicate-submit guard: ignore clicks while a request is in flight
+const [busy, setBusy] = useState(false)
+const busyRef = useRef(false)
+const updateResume = async (...args) => {
+  if (busyRef.current) { args[0]?.preventDefault?.(); return }
+  busyRef.current = true; setBusy(true)
+  try { return await updateResumeRun(...args) } finally { busyRef.current = false; setBusy(false) }
+}
+const updateResumeRun = async () => {
 
     try {
       
+      if (!resume) {
+        return toast.error('Please select a PDF resume')
+      }
+      // The API runs on Vercel, which rejects uploads over 4.5 MB; the server allows up to 4 MB
+      if (resume.type !== 'application/pdf' || !/\.pdf$/i.test(resume.name)) {
+        return toast.error('Resume must be a PDF file')
+      }
+      if (resume.size > 4 * 1024 * 1024) {
+        return toast.error('Resume is too large. Maximum size is 4 MB')
+      }
+
       const formData = new FormData()
       formData.append('resume', resume)
 
@@ -40,7 +59,7 @@ const Applications = () => {
       }
 
     } catch (error) {
-      toast.error(error.message)
+      toast.error(error?.response?.data?.message || error.message)
     }
 
     setIsEdit(false)
@@ -68,7 +87,7 @@ const Applications = () => {
                   <input id='resumeUpload' onChange={e => setResume(e.target.files[0])} accept='application/pdf' type="file" name="" hidden />
                   <img src={assets.profile_upload_icon} alt="" />
                 </label>
-                <button onClick={updateResume} className='bg-green-100 border-green-400 rounded-lg px-4 py-2 cursor-pointer'>Save</button>
+                <button onClick={updateResume} disabled={busy} className='disabled:opacity-60 bg-green-100 border-green-400 rounded-lg px-4 py-2 cursor-pointer'>Save</button>
               </>
               : <div className='flex gap-2'>
                 <a href={userData.resume} target='_blank' className='bg-blue-100 text-blue-600 px-4 py-2 rounded-lg'>

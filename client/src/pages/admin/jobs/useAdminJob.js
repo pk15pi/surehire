@@ -8,6 +8,7 @@ const useAdminJob = (id) => {
     const { backendUrl } = useContext(AppContext)
     const onAuthError = useAdminAuthError()
     const [job, setJob] = useState(null)
+    const [suggested, setSuggested] = useState({})
     const [state, setState] = useState('loading')
     const [error, setError] = useState('')
     const [attempt, setAttempt] = useState(0)
@@ -18,6 +19,7 @@ const useAdminJob = (id) => {
             .then(({ data }) => {
                 if (!active) return
                 setJob(data.job)
+                setSuggested(data.suggestedMasters || {})
                 setState('ready')
             })
             .catch((err) => {
@@ -33,7 +35,7 @@ const useAdminJob = (id) => {
 
     const reload = useCallback(() => { setState('loading'); setAttempt(a => a + 1) }, [])
 
-    return { job, setJob, state, error, reload, onAuthError }
+    return { job, setJob, suggested, state, error, reload, onAuthError }
 }
 
 export default useAdminJob

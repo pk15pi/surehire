@@ -12,11 +12,11 @@ const wantsForm = (location) =>
     new URLSearchParams(location.search).get('mode') === 'form' || location.hash === '#form'
 
 const HireEngineers = () => {
-    usePageMeta('Hire Engineers', 'Share your engineering hiring requirement with SureHire - role, location, positions and timeline.')
+    usePageMeta('Hire Talent', 'Share your engineering hiring requirement with SureHire - role, location, positions and timeline.')
     const { setShowScheduleCall } = useContext(AppContext)
     const location = useLocation()
     const navigate = useNavigate()
-    const [showForm, setShowForm] = useState(() => wantsForm(location))
+    const [showForm, setShowForm] = useState(true) // full form shown by default; schedule-a-call stays available
     const formRef = useRef(null)
     const formCardRef = useRef(null)
     const shouldFocus = useRef(wantsForm(location))
@@ -60,8 +60,8 @@ const HireEngineers = () => {
         `text-left w-full h-full flex gap-4 items-start border rounded-xl p-5 bg-white shadow-sm transition hover:border-blue-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${active ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`
 
     return (
-    <PageLayout title='Hire Engineers' subtitle='Tell us about the role and we will get back to you to discuss the requirement.'>
-        <div className='max-w-4xl'>
+    <PageLayout title='Hire Talent' subtitle='Tell us about the role and we will get back to you to discuss the requirement.'>
+        <div className='max-w-4xl mx-auto'>
             <section aria-labelledby='hire-choice-title' className='mb-8'>
                 <h2 id='hire-choice-title' className='text-lg font-semibold mb-1'>How would you like to share your requirement?</h2>
                 <p className='text-sm text-gray-600 mb-4'>Choose whichever is easier for you - both reach our hiring team.</p>

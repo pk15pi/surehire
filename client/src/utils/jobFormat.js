@@ -1,5 +1,3 @@
-import kconvert from 'k-convert'
-
 // Display helpers shared by public job pages and the admin panel.
 export const companyName = (job) => job?.companyId?.name || job?.clientName || 'SureHire'
 
@@ -16,7 +14,7 @@ const fmt = (n, currency) => {
 
 const PERIOD = { Hourly: '/hr', Daily: '/day', Monthly: '/month', Annual: '/year' }
 
-// "₹12,00,000 – ₹18,00,000 /year (Negotiable)" | "Not disclosed" | legacy "CTC: 12k"
+// "₹12,00,000 – ₹18,00,000 /year (Negotiable)" | "Not disclosed" | legacy "CTC: ₹12,00,000"
 export const salaryText = (job) => {
     if (!job) return ''
     if (job.salaryUndisclosed) return 'Not disclosed'
@@ -27,7 +25,7 @@ export const salaryText = (job) => {
         text = a && b ? (a === b ? a : `${a} – ${b}`) : (a ? `From ${a}` : `Up to ${b}`)
         if (job.salaryPeriod) text += ` ${PERIOD[job.salaryPeriod] || ''}`.trimEnd()
     } else if (job.salary) {
-        text = `CTC: ${kconvert.convertTo(job.salary)}`
+        text = `CTC: ${fmt(job.salary, "INR")}` // e.g. CTC: ₹12,00,000
     }
     if (job.salaryNegotiable) text = text ? `${text} (Negotiable)` : 'Negotiable'
     return text

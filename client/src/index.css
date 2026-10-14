@@ -20,7 +20,7 @@ button{
 
 /* Custom Class name */
 
-.rich-text { font-size: 15px; color: #7a7b7d; }
+.rich-text { font-size: 15px; color: #7a7b7d; overflow-wrap: anywhere; }
 
 .rich-text p { margin-bottom: 16px; }
 

@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useClerk } from '@clerk/clerk-react';
-import { MessageCircle, Phone, X, Send, Mail } from 'lucide-react';
+import { Headset, Phone, X, Send, Mail } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { STARTER_CHIPS } from './knowledgeBase';
 import { match, getIntent } from './matcher';
@@ -37,13 +37,16 @@ const loadMessages = () => {
   return [welcome()];
 };
 
-const dockBtn = 'w-12 h-12 rounded-full flex items-center justify-center shadow-md border transition focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-300 hover:-translate-y-0.5';
+const dockBtn = 'relative w-12 h-12 rounded-full flex items-center justify-center shadow-md border transition duration-200 ease-out focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-300 hover:-translate-y-1 hover:shadow-lg motion-reduce:transition-none motion-reduce:hover:translate-y-0';
+// Soft attention ring; hidden for users who prefer reduced motion
+const Ring = ({ color }) => <span aria-hidden="true" className={`pointer-events-none absolute inset-0 rounded-full ${color} opacity-40 animate-ping [animation-duration:2.4s] motion-reduce:hidden`} />;
+const OnlineDot = () => <span aria-hidden="true" className="absolute top-0 right-0 w-3 h-3 rounded-full bg-green-500 ring-2 ring-white" />;
 
 const HelpDock = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { openSignIn } = useClerk();
-  const { setShowRecruiterLogin, showRecruiterLogin, setShowScheduleCall } = useContext(AppContext);
+  const { showRecruiterLogin, showScheduleCall, setShowScheduleCall } = useContext(AppContext);
 
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState(loadMessages);
@@ -75,7 +78,7 @@ const HelpDock = () => {
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
   // Public pages only: hide on recruiter dashboard, admin, and while recruiter modal is open.
-  if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/admin') || showRecruiterLogin) return null;
+  if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/admin') || showRecruiterLogin || showScheduleCall) return null;
 
   const reply = (userText, botMsg) => {
     setMessages((m) => [...m, { from: 'user', text: userText }]);
@@ -113,7 +116,7 @@ const HelpDock = () => {
       const page = { 'job-list': '/jobs', faq: '/faq' }[a.id] || '/';
       if (location.pathname !== page) { navigate(page); setTimeout(scroll, 300); } else scroll();
     } else if (a.type === 'signIn') openSignIn();
-    else if (a.type === 'recruiterLogin') { setOpen(false); setShowRecruiterLogin(true); }
+    // 'recruiterLogin' action removed: recruiter access is invite-only
     else if (a.type === 'scheduleCall') { setOpen(false); setShowScheduleCall(a.iAm ? { iAm: a.iAm } : true); }
   };
 
@@ -212,18 +215,21 @@ const HelpDock = () => {
           aria-label={open ? 'Close AI assistant' : 'Open AI assistant'} aria-expanded={open} aria-controls="surehire-help-panel"
           title="Ask SureHire Assistant"
           className={`${dockBtn} bg-blue-600 border-blue-600 text-white hover:bg-blue-700`}>
-          {open ? <X size={20} /> : <MessageCircle size={20} />}
+          {open ? <X size={20} /> : <Headset size={22} />}
+          {!open && <OnlineDot />}
         </button>
         {telHref && (
           <a href={telHref} aria-label={`Call SureHire at ${CONTACT_PHONE}`} title="Call us"
             className={`${dockBtn} bg-white border-gray-200 text-blue-600 hover:bg-gray-50`}>
-            <Phone size={20} />
+            <Ring color="bg-blue-400" />
+            <Phone size={20} className="relative" />
           </a>
         )}
         {waHref && (
           <a href={waHref} target="_blank" rel="noopener noreferrer" aria-label="Chat with SureHire on WhatsApp (opens in new tab)" title="WhatsApp us"
             className={`${dockBtn} bg-[#25D366] border-[#25D366] text-white hover:brightness-95`}>
-            <WhatsAppIcon className="w-5 h-5" />
+            <Ring color="bg-[#25D366]" />
+            <WhatsAppIcon className="relative w-5 h-5" />
           </a>
         )}
       </nav>
