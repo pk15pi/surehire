@@ -1,6 +1,7 @@
 import express from 'express'
 import { changeJobApplicationStatus, changeVisiblity, getCompanyData, getCompanyJobApplicants, getCompanyPostedJobs, loginCompany, postJob, registerCompany } from '../controllers/companyControllers.js'
 import { loginWithOtp, requestOtp, resendVerification, resetPassword, verifyEmail, verifyResetOtp } from '../controllers/companyAuthController.js'
+import { getPhone, sendPhoneCode, verifyPhoneCode } from '../controllers/companyPhoneController.js'
 import { imageUpload, single } from '../config/multer.js'
 import { companyAuthRateLimiter, otpSendRateLimiter, otpVerifyRateLimiter } from '../middleware/rateLimit.js'
 import { protectCompany } from '../middleware/authMiddleware.js'
@@ -28,6 +29,11 @@ router.post('/auth/password/reset', otpVerifyRateLimiter, resetPassword)
 // Email confirmation link
 router.post('/auth/verify-email', otpVerifyRateLimiter, verifyEmail)
 router.post('/auth/verify-email/resend', otpSendRateLimiter, resendVerification)
+
+// Account mobile number (authenticated): add/change -> OTP -> verified
+router.get('/phone', protectCompany, getPhone)
+router.post('/phone/send-code', protectCompany, otpSendRateLimiter, sendPhoneCode)
+router.post('/phone/verify', protectCompany, otpVerifyRateLimiter, verifyPhoneCode)
 
 // get company data
 router.get('/company', protectCompany, getCompanyData)

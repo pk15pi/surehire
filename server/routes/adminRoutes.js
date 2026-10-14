@@ -2,6 +2,7 @@ import express from 'express'
 import { adminLogin, adminMe, getDocumentUrl, getOverview, listSubmissions, updateSubmission } from '../controllers/adminController.js'
 import { archiveJob, createJob, deleteJob, duplicateJob, getJob, listJobs, publishJob, unpublishJob, updateJob } from '../controllers/adminJobController.js'
 import { getCandidate, getDashboard, listApplications, listAuditLogs, listCandidates, updateApplicationStatus } from '../controllers/adminModulesController.js'
+import { createCompany, listCompanies, updateCompany } from '../controllers/adminCompanyController.js'
 import { createAdminMasterRouter } from './masterRoutes.js'
 import { noStore, protectAdmin } from '../middleware/adminAuth.js'
 import { adminApiRateLimiter, adminLoginRateLimiter } from '../middleware/rateLimit.js'
@@ -42,6 +43,11 @@ router.get('/candidates/:id', getCandidate)
 router.get('/applications', listApplications)
 router.patch('/applications/:id', updateApplicationStatus)
 router.get('/audit-logs', listAuditLogs)
+
+// Recruiter / company accounts (created without a password; audited)
+router.get('/companies', listCompanies)
+router.post('/companies', createCompany)
+router.patch('/companies/:id', updateCompany)
 
 // Master data (generic CRUD for every list in master/registry.js)
 router.use('/master', createAdminMasterRouter())

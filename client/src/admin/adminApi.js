@@ -80,6 +80,11 @@ export const getAdminCandidate = (backendUrl, id) => adminRequest(backendUrl, { 
 export const updateAdminApplicationStatus = (backendUrl, id, status) => adminRequest(backendUrl, { method: 'patch', url: `/applications/${encodeURIComponent(id)}`, data: { status } })
 export const listAdminAuditLogs = (backendUrl, params) => adminRequest(backendUrl, { method: 'get', url: '/audit-logs', params })
 
+// Recruiter / company accounts
+export const listAdminCompanies = (backendUrl, params) => adminRequest(backendUrl, { method: 'get', url: '/companies', params })
+export const createAdminCompany = (backendUrl, data) => adminRequest(backendUrl, { method: 'post', url: '/companies', data })
+export const updateAdminCompany = (backendUrl, id, data) => adminRequest(backendUrl, { method: 'patch', url: `/companies/${encodeURIComponent(id)}`, data })
+
 export const listMasterTypes = (backendUrl) => adminRequest(backendUrl, { method: 'get', url: '/master' })
 export const listMaster = (backendUrl, type, params) => adminRequest(backendUrl, { method: 'get', url: `/master/${encodeURIComponent(type)}`, params })
 export const createMaster = (backendUrl, type, data) => adminRequest(backendUrl, { method: 'post', url: `/master/${encodeURIComponent(type)}`, data })

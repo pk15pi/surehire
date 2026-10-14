@@ -34,6 +34,7 @@ export const ADMIN_NAV = [
     { to: '/admin/dashboard', label: 'Dashboard' },
     { to: '/admin/jobs', label: 'Jobs' },
     { to: '/admin/candidates', label: 'Candidates' },
+    { to: '/admin/recruiters', label: 'Recruiters' },
     { to: '/admin/applications', label: 'Applications' },
     { to: '/admin/clients', label: 'Clients' },
     { to: '/admin/master', label: 'Master data' },

@@ -10,9 +10,12 @@ export const destKeyOf = (channel, destination) => keyedHash(`${channel}:${desti
 const codeHashOf = (purpose, destKey, code) => keyedHash(`${purpose}:${destKey}:${code}`, 'otp')
 
 // deliver=false records a decoy (unknown account) so cooldown/limits look identical
-export const issueOtp = async ({ purpose, channel, destination, companyId = null, deliver, ip }) => {
+// bind (optional) ties the code to an extra subject, e.g. a company id for phone_verify
+const keyFor = (channel, destination, bind) => destKeyOf(channel, bind ? `${bind}|${destination}` : destination)
+
+export const issueOtp = async ({ purpose, channel, destination, companyId = null, deliver, ip, bind }) => {
     const cfg = authConfig()
-    const destKey = destKeyOf(channel, destination)
+    const destKey = keyFor(channel, destination, bind)
     const now = Date.now()
 
     const latest = await AuthCode.findOne({ purpose, destKey }).sort({ createdAt: -1 }).select('createdAt').lean()
@@ -44,10 +47,10 @@ export const issueOtp = async ({ purpose, channel, destination, companyId = null
     return { status: 'sent', cooldown: cfg.otpResendCooldownSeconds }
 }
 
-export const verifyOtp = async ({ purpose, channel, destination, code }) => {
+export const verifyOtp = async ({ purpose, channel, destination, code, bind }) => {
     if (typeof code !== 'string' || !/^\d{6}$/.test(code)) return { ok: false }
     const cfg = authConfig()
-    const destKey = destKeyOf(channel, destination)
+    const destKey = keyFor(channel, destination, bind)
     const now = new Date()
     // Count the attempt first (atomically) so parallel guesses can't exceed the limit
     const doc = await AuthCode.findOneAndUpdate(

@@ -99,7 +99,7 @@ export const sendSms = async ({ to, text, code }) => {
 export const channelConfigured = (channel) => channel === 'email' ? emailConfigured() : channel === 'sms' ? smsConfigured() : false
 
 // ---- message templates -----------------------------------------------------
-const PURPOSE_TEXT = { signup: 'verify your mobile number', login: 'sign in', reset: 'reset your password' }
+const PURPOSE_TEXT = { signup: 'verify your mobile number', login: 'sign in', reset: 'reset your password', phone_verify: 'verify your mobile number' }
 
 export const sendOtp = async ({ channel, to, code, purpose, minutes }) => {
     const text = `${code} is your SureHire code to ${PURPOSE_TEXT[purpose]}. It expires in ${minutes} minutes. Do not share it with anyone.`

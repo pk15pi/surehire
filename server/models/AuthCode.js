@@ -2,7 +2,7 @@ import mongoose from 'mongoose'
 
 // One-time codes. Only keyed hashes are stored (never the code or the raw destination).
 const authCodeSchema = new mongoose.Schema({
-    purpose: { type: String, enum: ['signup', 'login', 'reset'], required: true },
+    purpose: { type: String, enum: ['signup', 'login', 'reset', 'phone_verify'], required: true },
     channel: { type: String, enum: ['email', 'sms'], required: true },
     destKey: { type: String, required: true },          // HMAC of normalized destination
     codeHash: { type: String, required: true },

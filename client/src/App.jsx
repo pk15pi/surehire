@@ -40,6 +40,8 @@ const AdminJobs = lazy(() => import('./pages/admin/jobs/AdminJobs'))
 const AdminJobCreate = lazy(() => import('./pages/admin/jobs/AdminJobEditor').then(m => ({ default: m.AdminJobCreate })))
 const AdminJobEdit = lazy(() => import('./pages/admin/jobs/AdminJobEditor').then(m => ({ default: m.AdminJobEdit })))
 const AdminJobView = lazy(() => import('./pages/admin/jobs/AdminJobView'))
+const Account = lazy(() => import('./pages/Account'))
+const AdminRecruiters = lazy(() => import('./pages/admin/AdminRecruiters'))
 const AdminJobPreview = lazy(() => import('./pages/admin/jobs/AdminJobPreview'))
 
 const App = () => {
@@ -74,6 +76,7 @@ const App = () => {
           <Route index element={<Navigate to='dashboard' replace />} />
           <Route path='dashboard' element={<AdminDashboard />} />
           <Route path='candidates' element={<AdminCandidates />} />
+          <Route path='recruiters' element={<AdminRecruiters />} />
           <Route path='candidates/:id' element={<AdminCandidateDetail />} />
           <Route path='applications' element={<AdminApplications />} />
           <Route path='clients' element={<MasterDataPage type='clients' />} />
@@ -96,6 +99,7 @@ const App = () => {
           <Route path='add-job' element={<AddJob />} />
           <Route path='manage-jobs' element={<ManageJobs />} />
           <Route path='view-applications' element={<ViewApplications />} />
+          <Route path='account' element={<Account />} />
           </> : null
           }
           
